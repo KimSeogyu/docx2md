@@ -1,0 +1,18 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.iml
+
+# Project Specific
+output_tests/
+test_output/
+samples/

@@ -1,0 +1,63 @@
+//! # docx2md
+//!
+//! Zero-loss DOCX to Markdown converter using `docx_rust`.
+//!
+//! ## Example
+//!
+//! ```no_run
+//! use docx2md::{DocxToMarkdown, ConvertOptions, ImageHandling};
+//!
+//! let options = ConvertOptions {
+//!     image_handling: ImageHandling::SaveToDir("./images".into()),
+//!     ..Default::default()
+//! };
+//!
+//! let converter = DocxToMarkdown::new(options);
+//! let markdown = converter.convert("document.docx").unwrap();
+//! println!("{}", markdown);
+//! ```
+
+pub mod converter;
+pub mod error;
+pub mod localization;
+
+pub use converter::DocxToMarkdown;
+pub use error::{Error, Result};
+pub use localization::{DefaultLocalization, KoreanLocalization, LocalizationStrategy};
+
+use std::path::PathBuf;
+
+/// Options for DOCX to Markdown conversion.
+#[derive(Debug, Clone)]
+pub struct ConvertOptions {
+    /// How to handle images in the document.
+    pub image_handling: ImageHandling,
+    /// Whether to preserve exact whitespace.
+    pub preserve_whitespace: bool,
+    /// Whether to use HTML for underlined text.
+    pub html_underline: bool,
+    /// Whether to use HTML for strikethrough text.
+    pub html_strikethrough: bool,
+}
+
+impl Default for ConvertOptions {
+    fn default() -> Self {
+        Self {
+            image_handling: ImageHandling::Inline,
+            preserve_whitespace: false,
+            html_underline: true,
+            html_strikethrough: false,
+        }
+    }
+}
+
+/// Specifies how images should be handled during conversion.
+#[derive(Debug, Clone)]
+pub enum ImageHandling {
+    /// Save images to a directory and reference them by path.
+    SaveToDir(PathBuf),
+    /// Embed images as base64 data URIs.
+    Inline,
+    /// Skip images entirely.
+    Skip,
+}
