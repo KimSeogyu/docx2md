@@ -35,7 +35,7 @@ pyo3 = { version = "0.21", features = ["extension-module"], optional = true }
 
 [lib]
 name = "docx2md"
-crate-type = ["rlib"]
+crate-type = ["cdylib", "rlib"]
 
 [dev-dependencies]
 pretty_assertions = "1.4"

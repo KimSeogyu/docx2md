@@ -1,0 +1,11 @@
+[package]
+name = "rust_example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Use from crates.io (uncomment after package is published)
+# docx2md = "0.1"
+
+# Use from GitHub (since crates.io publish may take time)
+docx2md = { git = "https://github.com/KimSeogyu/docx2md.git", tag = "v0.1.0" }

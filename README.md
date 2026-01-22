@@ -10,7 +10,8 @@ Zero-loss DOCX to Markdown converter, written in Rust with Python bindings.
 ## Features
 
 - **High Fidelity**: Preserves formatting, tables, and images
-- **Localization**: Intelligent parsing of Korean headers (e.g., `제1조` → `### 제1조`)
+- **Heading Support**: Converts DOCX heading levels to Markdown (Heading 1 → `##`, Heading 2 → `###`, etc.)
+- **Korean Localization** (optional): Intelligent parsing of Korean headers (e.g., `제1조` → `### 제1조`) with `--lang ko` option
 - **Performance**: Fast conversion using Rust
 - **Dual Mode**: Use as a CLI tool, Rust library, or Python package
 
