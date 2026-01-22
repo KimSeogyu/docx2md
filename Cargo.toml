@@ -1,13 +1,13 @@
 [package]
-name = "docx2md"
+name = "dm2xcod"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
-description = "Zero-loss DOCX to Markdown converter"
+description = "DOCX to Markdown converter written in Rust"
 license = "MIT"
-repository = "https://github.com/KimSeogyu/docx2md"
-homepage = "https://github.com/KimSeogyu/docx2md"
-documentation = "https://docs.rs/docx2md"
+repository = "https://github.com/KimSeogyu/dm2xcod"
+homepage = "https://github.com/KimSeogyu/dm2xcod"
+documentation = "https://docs.rs/dm2xcod"
 readme = "README.md"
 keywords = ["docx", "markdown", "converter", "document", "office"]
 categories = [
@@ -15,7 +15,7 @@ categories = [
     "text-processing",
     "parser-implementations",
 ]
-default-run = "docx2md"
+default-run = "dm2xcod"
 
 [workspace]
 members = ["libs/docx-rust"]
@@ -34,7 +34,7 @@ clap = { version = "4.5", features = ["derive"] }
 pyo3 = { version = "0.21", features = ["extension-module"], optional = true }
 
 [lib]
-name = "docx2md"
+name = "dm2xcod"
 crate-type = ["cdylib", "rlib"]
 
 [dev-dependencies]

@@ -14,7 +14,7 @@ source .venv/bin/activate
 echo "📦 Installing build dependencies (maturin)..."
 pip install maturin
 
-echo "🔨 Building and installing docx2md..."
+echo "🔨 Building and installing dm2xcod..."
 # Navigate to project root to run maturin
 cd ../..
 maturin develop

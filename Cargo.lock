@@ -395,6 +395,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dm2xcod"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "clap",
+ "docx-rust",
+ "pretty_assertions",
+ "pyo3",
+ "regex",
+ "thiserror 2.0.18",
+ "zip 2.4.2",
+]
+
+[[package]]
 name = "docx-rust"
 version = "0.1.10"
 dependencies = [
@@ -409,20 +423,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "zip 1.1.4",
-]
-
-[[package]]
-name = "docx2md"
-version = "0.1.0"
-dependencies = [
- "base64",
- "clap",
- "docx-rust",
- "pretty_assertions",
- "pyo3",
- "regex",
- "thiserror 2.0.18",
- "zip 2.4.2",
 ]
 
 [[package]]

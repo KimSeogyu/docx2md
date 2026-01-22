@@ -1,11 +1,11 @@
-//! # docx2md
+//! # dm2xcod
 //!
-//! Zero-loss DOCX to Markdown converter using `docx_rust`.
+//! DOCX to Markdown converter using `docx_rust`.
 //!
 //! ## Example
 //!
 //! ```no_run
-//! use docx2md::{DocxToMarkdown, ConvertOptions, ImageHandling};
+//! use dm2xcod::{DocxToMarkdown, ConvertOptions, ImageHandling};
 //!
 //! let options = ConvertOptions {
 //!     image_handling: ImageHandling::SaveToDir("./images".into()),
@@ -80,7 +80,7 @@ mod python_bindings {
 
     /// A Python module implemented in Rust.
     #[pymodule]
-    pub fn docx2md(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    pub fn dm2xcod(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(convert_docx, m)?)?;
         Ok(())
     }

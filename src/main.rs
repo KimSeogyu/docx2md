@@ -1,7 +1,7 @@
-//! CLI for docx2md - DOCX to Markdown converter
+//! CLI for dm2xcod - DOCX to Markdown converter
 
 use clap::Parser;
-use docx2md::{ConvertOptions, DocxToMarkdown, ImageHandling};
+use dm2xcod::{ConvertOptions, DocxToMarkdown, ImageHandling};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]

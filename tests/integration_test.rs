@@ -2,7 +2,7 @@ use std::process::Command;
 
 #[test]
 fn test_cli_help() {
-    let output = Command::new(env!("CARGO_BIN_EXE_docx2md"))
+    let output = Command::new(env!("CARGO_BIN_EXE_dm2xcod"))
         .arg("--help")
         .output()
         .expect("Failed to execute command");

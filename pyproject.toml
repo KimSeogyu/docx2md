@@ -3,9 +3,9 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "docx2md"
+name = "dm2xcod"
 version = "0.1.0"
-description = "Zero-loss DOCX to Markdown converter"
+description = "DOCX to Markdown converter written in Rust"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"
@@ -24,10 +24,10 @@ classifiers = [
 keywords = ["docx", "markdown", "converter", "document"]
 
 [project.urls]
-Homepage = "https://github.com/KimSeogyu/docx2md"
-Repository = "https://github.com/KimSeogyu/docx2md"
-Issues = "https://github.com/KimSeogyu/docx2md/issues"
+Homepage = "https://github.com/KimSeogyu/dm2xcod"
+Repository = "https://github.com/KimSeogyu/dm2xcod"
+Issues = "https://github.com/KimSeogyu/dm2xcod/issues"
 
 [tool.maturin]
 features = ["python"]
-module-name = "docx2md"
+module-name = "dm2xcod"

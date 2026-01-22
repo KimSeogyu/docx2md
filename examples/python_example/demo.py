@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Example script demonstrating docx2md Python bindings.
-Install: pip install docx2md
+Example script demonstrating dm2xcod Python bindings.
+Install: pip install dm2xcod
 """
 
 import sys
@@ -9,9 +9,9 @@ import sys
 
 def main():
     try:
-        import docx2md
+        import dm2xcod
     except ImportError:
-        print("❌ docx2md not installed. Install with: pip install docx2md")
+        print("❌ dm2xcod not installed. Install with: pip install dm2xcod")
         sys.exit(1)
 
     if len(sys.argv) < 2:
@@ -22,7 +22,7 @@ def main():
     output_file = sys.argv[2] if len(sys.argv) > 2 else None
 
     try:
-        markdown = docx2md.convert_docx(input_file)
+        markdown = dm2xcod.convert_docx(input_file)
 
         if output_file:
             with open(output_file, "w", encoding="utf-8") as f:

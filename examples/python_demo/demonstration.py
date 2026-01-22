@@ -1,4 +1,4 @@
-import docx2md
+import dm2xcod
 import os
 
 
@@ -16,7 +16,7 @@ def main():
 
     try:
         # Convert DOCX to Markdown
-        markdown = docx2md.convert_docx(sample_docx)
+        markdown = dm2xcod.convert_docx(sample_docx)
 
         # Print first 500 characters as preview
         print("\n--- Conversion Success! Preview (first 500 chars) ---")

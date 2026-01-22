@@ -1,92 +1,79 @@
-# docx2md
+# dm2xcod
 
-[![Crates.io](https://img.shields.io/crates/v/docx2md.svg)](https://crates.io/crates/docx2md)
-[![PyPI](https://img.shields.io/pypi/v/docx2md.svg)](https://pypi.org/project/docx2md/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://github.com/KimSeogyu/docx2md/actions/workflows/release.yml/badge.svg)](https://github.com/KimSeogyu/docx2md/actions)
+[![PyPI](https://img.shields.io/pypi/v/dm2xcod.svg)](https://pypi.org/project/dm2xcod/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Zero-loss DOCX to Markdown converter, written in Rust with Python bindings.
+DOCX to Markdown converter. Written in Rust with Python bindings.
 
 ## Features
 
-- **High Fidelity**: Preserves formatting, tables, and images
-- **Heading Support**: Converts DOCX heading levels to Markdown (Heading 1 → `##`, Heading 2 → `###`, etc.)
-- **Korean Localization** (optional): Intelligent parsing of Korean headers (e.g., `제1조` → `### 제1조`) with `--lang ko` option
-- **Performance**: Fast conversion using Rust
-- **Dual Mode**: Use as a CLI tool, Rust library, or Python package
+- Converts `.docx` files to Markdown format
+- Preserves heading hierarchy, text formatting (bold, italic, underline), tables, and images
+- Handles DOCX numbering (ordered/unordered lists)
+- Korean heading localization support (`--lang ko`)
 
 ## Requirements
 
-| Component | Version |
-|-----------|---------|
-| Rust | 1.75+ |
-| Python | 3.12+ |
+- Rust 1.75+
+- Python 3.12+ (for Python bindings)
 
 ## Installation
 
-### 🐍 Python
+### Python
 
 ```bash
-pip install docx2md
-```
-
-**Usage:**
-
-```python
-import docx2md
-
-markdown = docx2md.convert_docx("document.docx")
-print(markdown)
-```
-
-### 🦀 Rust
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-docx2md = "0.1"
-```
-
-**Usage:**
-
-```rust
-use docx2md::{DocxToMarkdown, ConvertOptions};
-
-fn main() {
-    let converter = DocxToMarkdown::with_defaults();
-    let md = converter.convert("document.docx").unwrap();
-    println!("{}", md);
-}
-```
-
-### 💻 CLI
-
-**Install:**
-
-```bash
-cargo install docx2md
-```
-
-**Run:**
-
-```bash
-docx2md input.docx output.md --lang ko
-```
-
-## Building from Source
-
-### Python (with maturin)
-
-```bash
-pip install maturin
-maturin develop --features python
+pip install dm2xcod
 ```
 
 ### Rust
 
+```toml
+[dependencies]
+dm2xcod = "0.1"
+```
+
+### CLI
+
 ```bash
+cargo install dm2xcod
+```
+
+## Usage
+
+### Python
+
+```python
+import dm2xcod
+
+markdown = dm2xcod.convert_docx("document.docx")
+print(markdown)
+```
+
+### Rust
+
+```rust
+use dm2xcod::{DocxToMarkdown, ConvertOptions};
+
+let converter = DocxToMarkdown::new(ConvertOptions::default());
+let markdown = converter.convert("document.docx").unwrap();
+```
+
+### CLI
+
+```bash
+dm2xcod input.docx output.md
+dm2xcod input.docx --lang ko  # Korean heading localization
+```
+
+## Build from Source
+
+```bash
+# Rust library
 cargo build --release
+
+# Python wheel
+pip install maturin
+maturin develop --features python
 ```
 
 ## License
