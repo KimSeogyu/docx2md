@@ -1,0 +1,34 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "docx2md"
+version = "0.1.0"
+description = "Zero-loss DOCX to Markdown converter"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: File Formats",
+]
+keywords = ["docx", "markdown", "converter", "document"]
+
+[project.urls]
+Homepage = "https://github.com/KimSeogyu/docx2md"
+Repository = "https://github.com/KimSeogyu/docx2md"
+Issues = "https://github.com/KimSeogyu/docx2md/issues"
+
+[tool.maturin]
+features = ["python"]
+python-source = "python"
+module-name = "docx2md"

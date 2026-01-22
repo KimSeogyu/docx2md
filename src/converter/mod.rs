@@ -16,7 +16,7 @@ use docx_rust::DocxFile;
 use std::collections::HashMap;
 use std::path::Path;
 
-pub use self::hyperlink::HyperlinkResolver;
+pub use self::hyperlink::resolve_hyperlink;
 pub use self::image::ImageExtractor;
 pub use self::numbering::NumberingResolver;
 pub use self::paragraph::ParagraphConverter;

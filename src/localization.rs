@@ -20,8 +20,8 @@ impl LocalizationStrategy for DefaultLocalization {
 
     fn parse_heading_style(&self, style: &str) -> Option<usize> {
         let style_lower = style.to_lowercase();
-        if style_lower.starts_with("heading") {
-            return style_lower[7..].trim().parse().ok();
+        if let Some(rest) = style_lower.strip_prefix("heading") {
+            return rest.trim().parse().ok();
         }
         match style_lower.as_str() {
             "title" => Some(1),
@@ -49,8 +49,8 @@ impl LocalizationStrategy for KoreanLocalization {
         let style_lower = style.to_lowercase();
 
         // Standard headings first
-        if style_lower.starts_with("heading") {
-            return style_lower[7..].trim().parse().ok();
+        if let Some(rest) = style_lower.strip_prefix("heading") {
+            return rest.trim().parse().ok();
         }
 
         // Korean heading styles: "제목 1" -> 1

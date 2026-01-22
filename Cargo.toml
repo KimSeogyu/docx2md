@@ -2,12 +2,27 @@
 name = "docx2md"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75"
 description = "Zero-loss DOCX to Markdown converter"
 license = "MIT"
+repository = "https://github.com/KimSeogyu/docx2md"
+homepage = "https://github.com/KimSeogyu/docx2md"
+documentation = "https://docs.rs/docx2md"
+readme = "README.md"
+keywords = ["docx", "markdown", "converter", "document", "office"]
+categories = [
+    "command-line-utilities",
+    "text-processing",
+    "parser-implementations",
+]
 default-run = "docx2md"
 
 [workspace]
 members = ["libs/docx-rust"]
+
+[features]
+default = []
+python = ["pyo3"]
 
 [dependencies]
 docx-rust = { path = "libs/docx-rust" }
@@ -16,6 +31,11 @@ thiserror = "2.0"
 zip = "2.2"
 regex = "1.10"
 clap = { version = "4.5", features = ["derive"] }
+pyo3 = { version = "0.21", features = ["extension-module"], optional = true }
+
+[lib]
+name = "docx2md"
+crate-type = ["rlib"]
 
 [dev-dependencies]
 pretty_assertions = "1.4"

@@ -61,3 +61,27 @@ pub enum ImageHandling {
     /// Skip images entirely.
     Skip,
 }
+
+// Python bindings (only when 'python' feature is enabled)
+#[cfg(feature = "python")]
+mod python_bindings {
+    use super::*;
+    use pyo3::prelude::*;
+
+    /// Converts a DOCX file to Markdown.
+    #[pyfunction]
+    fn convert_docx(path: String) -> PyResult<String> {
+        let options = ConvertOptions::default();
+        let converter = DocxToMarkdown::new(options);
+        converter
+            .convert(&path)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+    }
+
+    /// A Python module implemented in Rust.
+    #[pymodule]
+    pub fn docx2md(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        m.add_function(wrap_pyfunction!(convert_docx, m)?)?;
+        Ok(())
+    }
+}

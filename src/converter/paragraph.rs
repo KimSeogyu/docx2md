@@ -307,50 +307,12 @@ impl ParagraphConverter {
                 let mut marker = context.numbering.next_marker(num_id_val, ilvl_val);
 
                 // Handle localization-specific numbering (e.g., Korean "제N조" -> Heading)
-                if let Some(header_marker) = context.localization.handle_numbering(&marker) {
-                    if !is_heading {
-                        prefix = header_marker;
-                        prefix.push(' ');
-                        is_heading = true;
-
-                        // If the marker itself was transformed (e.g. "제1조." -> "### 제1조"),
-                        // we generally don't want to double-print the marker if it's already part of the prefix logic.
-                        // However, the logic below appends `marker` if `is_heading` is matched.
-                        // Let's adjust: if handle_numbering returned a full prefix (like "### 제1조"), we use that.
-                        // But wait, `handle_numbering` currently returns just the marker text formatted?
-                        // Actually, looking at `KoreanLocalization`: it returns "### 제1조".
-                        // So we should NOT append `marker` again below if we use this path.
-
-                        // We need to coordinate with the `if is_heading` block below.
-                        // Current logic below:
-                        // if is_heading { prefix.push_str(&marker); prefix.push(' '); }
-
-                        // If we set `prefix` here to "### 제1조 ", then we don't need the block below to append marker.
-                        // But `marker` variable still holds "제1조."
-
-                        // Let's Refactor:
-                        // If localization handles it, it dictates the entire prefix logic for this item.
-                    }
-                }
-
-                // Re-evaluating the flow to be cleaner:
-                // Check localization first.
                 if let Some(formatted_prefix) = context.localization.handle_numbering(&marker) {
                     if !is_heading {
-                        // It became a heading via localization (e.g. Article)
-                        // The strategy returns the implementation (e.g. "### 제1조")
-                        // We might need to ensure we don't double-add.
-                        // The strategy specifically returns "### marker".
-                        // So we set prefix directly.
                         prefix = formatted_prefix;
                         prefix.push(' ');
                         is_heading = true;
-
-                        // We must clear marker so it isn't added again below?
-                        // The logic below is:
-                        // if is_heading { prefix.push_str(&marker); ... }
-                        // So if we set marker to empty string, it works.
-                        marker = String::new();
+                        marker = String::new(); // Clear to prevent double-append below
                     }
                 }
 

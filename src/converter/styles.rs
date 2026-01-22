@@ -37,7 +37,7 @@ impl<'a> StyleResolver<'a> {
         // 4. Document defaults
         if let Some(defaults) = &self.styles.default {
             if let Some(r_pr) = &defaults.character.inner {
-                merged = merge_char_props(merged, r_pr);
+                merge_char_props_mut(&mut merged, r_pr);
             }
         }
 
@@ -53,7 +53,7 @@ impl<'a> StyleResolver<'a> {
 
         // 1. Direct formatting
         if let Some(direct) = direct_props {
-            merged = merge_char_props(merged, direct);
+            merge_char_props_mut(&mut merged, direct);
         }
 
         merged
@@ -70,7 +70,7 @@ impl<'a> StyleResolver<'a> {
         // Defaults
         if let Some(defaults) = &self.styles.default {
             if let Some(p_pr) = &defaults.paragraph.inner {
-                merged = merge_para_props(merged, p_pr);
+                merge_para_props_mut(&mut merged, p_pr);
             }
         }
 
@@ -81,7 +81,7 @@ impl<'a> StyleResolver<'a> {
 
         // Direct
         if let Some(direct) = direct_props {
-            merged = merge_para_props(merged, direct);
+            merge_para_props_mut(&mut merged, direct);
         }
 
         merged
@@ -116,7 +116,7 @@ impl<'a> StyleResolver<'a> {
         // Apply from root (most generic) to leaf (most specific)
         for style in chain.into_iter().rev() {
             if let Some(r_pr) = &style.character {
-                *target = merge_char_props(target.clone(), r_pr);
+                merge_char_props_mut(target, r_pr);
             }
         }
     }
@@ -136,54 +136,37 @@ impl<'a> StyleResolver<'a> {
 
         for style in chain.into_iter().rev() {
             if let Some(p_pr) = &style.paragraph {
-                *target = merge_para_props(target.clone(), p_pr);
+                merge_para_props_mut(target, p_pr);
             }
         }
     }
 }
 
-// Helper to merge character properties
-// Returns a NEW property set where `overlay` overrides `base`.
-fn merge_char_props<'a>(
-    base: CharacterProperty<'a>,
-    overlay: &CharacterProperty<'a>,
-) -> CharacterProperty<'a> {
-    let mut new = base;
-
+// Helper to merge character properties (in-place mutation)
+fn merge_char_props_mut<'a>(target: &mut CharacterProperty<'a>, overlay: &CharacterProperty<'a>) {
     if overlay.bold.is_some() {
-        new.bold = overlay.bold.clone();
+        target.bold = overlay.bold.clone();
     }
     if overlay.italics.is_some() {
-        new.italics = overlay.italics.clone();
+        target.italics = overlay.italics.clone();
     }
     if overlay.strike.is_some() {
-        new.strike = overlay.strike.clone();
+        target.strike = overlay.strike.clone();
     }
     if overlay.underline.is_some() {
-        new.underline = overlay.underline.clone();
+        target.underline = overlay.underline.clone();
     }
-    // Add other properties as needed (sz, color, etc.)
-
-    new
 }
 
-// Helper to merge paragraph properties
-fn merge_para_props<'a>(
-    base: ParagraphProperty<'a>,
-    overlay: &ParagraphProperty<'a>,
-) -> ParagraphProperty<'a> {
-    let mut new = base;
-
+// Helper to merge paragraph properties (in-place mutation)
+fn merge_para_props_mut<'a>(target: &mut ParagraphProperty<'a>, overlay: &ParagraphProperty<'a>) {
     if overlay.justification.is_some() {
-        new.justification = overlay.justification.clone();
+        target.justification = overlay.justification.clone();
     }
     if overlay.numbering.is_some() {
-        new.numbering = overlay.numbering.clone();
+        target.numbering = overlay.numbering.clone();
     }
     if overlay.style_id.is_some() {
-        new.style_id = overlay.style_id.clone();
+        target.style_id = overlay.style_id.clone();
     }
-    // Add indent, etc.
-
-    new
 }

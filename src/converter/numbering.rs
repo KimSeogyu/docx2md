@@ -213,8 +213,20 @@ impl<'a> NumberingResolver<'a> {
         match fmt {
             "bullet" | "none" => "-".to_string(),
             "decimal" => format!("{}", val),
-            "lowerLetter" => format!("{}", ((val - 1) as u8 + b'a') as char), // Simplistic
-            "upperLetter" => format!("{}", ((val - 1) as u8 + b'A') as char),
+            "lowerLetter" => {
+                if val >= 1 && val <= 26 {
+                    char::from(b'a' + (val - 1) as u8).to_string()
+                } else {
+                    format!("{}", val)
+                }
+            }
+            "upperLetter" => {
+                if val >= 1 && val <= 26 {
+                    char::from(b'A' + (val - 1) as u8).to_string()
+                } else {
+                    format!("{}", val)
+                }
+            }
             "lowerRoman" => Self::to_roman(val).to_lowercase(),
             "upperRoman" => Self::to_roman(val),
             "koreanCounting" | "korean" | "ganada" => Self::format_ganada(val),
@@ -280,11 +292,7 @@ impl<'a> NumberingResolver<'a> {
 
     /// Converts a number to Roman numeral.
     fn to_roman(mut num: i32) -> String {
-        if num <= 0 {
-            return num.to_string();
-        }
-        let mut result = String::new();
-        let rom = vec![
+        const ROMAN_TABLE: &[(i32, &str)] = &[
             (1000, "M"),
             (900, "CM"),
             (500, "D"),
@@ -300,7 +308,11 @@ impl<'a> NumberingResolver<'a> {
             (1, "I"),
         ];
 
-        for (v, s) in rom {
+        if num <= 0 {
+            return num.to_string();
+        }
+        let mut result = String::new();
+        for &(v, s) in ROMAN_TABLE {
             while num >= v {
                 result.push_str(s);
                 num -= v;
