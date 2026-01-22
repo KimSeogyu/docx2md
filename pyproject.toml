@@ -30,5 +30,4 @@ Issues = "https://github.com/KimSeogyu/docx2md/issues"
 
 [tool.maturin]
 features = ["python"]
-python-source = "python"
 module-name = "docx2md"
