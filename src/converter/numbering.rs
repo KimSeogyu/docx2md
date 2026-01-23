@@ -55,7 +55,11 @@ impl<'a> NumberingResolver<'a> {
                         .as_ref()
                         .map(|f| f.value.to_string())
                         .unwrap_or_else(|| "decimal".to_string());
-                    let lvl_text = lvl.level_text.as_ref().map(|t| t.value.to_string());
+                    let lvl_text = lvl
+                        .level_text
+                        .as_ref()
+                        .and_then(|t| t.value.as_ref())
+                        .map(|v| v.to_string());
 
                     // Heuristic: If this level looks like an "Article" heading (제%1조),
                     // treat it as a base level (Level 0 equivalent) for indentation.

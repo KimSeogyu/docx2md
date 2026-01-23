@@ -37,4 +37,5 @@ name = "dm2xcod"
 crate-type = ["cdylib", "rlib"]
 
 [dev-dependencies]
+hard-xml = "1.27.0"
 pretty_assertions = "1.4"

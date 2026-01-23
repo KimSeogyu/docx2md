@@ -58,20 +58,14 @@ impl TableConverter {
                             .as_ref()
                             .map(|g| g.val as usize)
                             .unwrap_or(1);
-                        let v_merge_val = cell
-                            .property
-                            .v_merge
-                            .as_ref()
-                            .and_then(|v| v.val.as_deref());
+                        let v_merge_val =
+                            cell.property.v_merge.as_ref().and_then(|v| v.val.as_ref());
 
-                        // Parse vMerge: "restart" or "continue". If None but tag exists -> continue (but our struct is Option)
-                        // Actually in our patched struct: None field means no merge.
-                        // Some(VMerge { val: None }) -> ? XML <w:vMerge/> means continue.
-                        // Some(VMerge { val: Some("restart") }) -> restart.
-                        let is_v_merge_restart = v_merge_val == Some("restart");
-                        // If v_merge is present, it's a merge definition.
-                        // If val is "restart", it's the start.
-                        // If val is "continue" or None (but v_merge exists), it's a continuation.
+                        // Parse vMerge: "restart" or "continue".
+                        let is_v_merge_restart = matches!(
+                            v_merge_val,
+                            Some(docx_rust::formatting::VMergeType::Restart)
+                        );
 
                         let is_v_merge_continue =
                             cell.property.v_merge.is_some() && !is_v_merge_restart;
