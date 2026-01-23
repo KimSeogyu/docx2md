@@ -17,6 +17,8 @@ pub struct NumberingResolver<'a> {
     /// Maps abstractNumId -> base indentation level (shift)
     /// Used to normalize indentation for lists that start at high levels (e.g., Article at Level 4)
     level_shifts: HashMap<i32, i32>,
+    /// Maps (numId, ilvl) -> override LevelDef (style change)
+    style_overrides: HashMap<(i32, i32), LevelDef>,
     _phantom: std::marker::PhantomData<&'a ()>,
 }
 
@@ -34,6 +36,7 @@ impl<'a> NumberingResolver<'a> {
         let mut num_instances = HashMap::new();
         let mut abstract_nums = HashMap::new();
         let mut overrides = HashMap::new();
+        let mut style_overrides = HashMap::new();
         let mut level_shifts = HashMap::new();
 
         if let Some(numbering) = &docx.numbering {
@@ -100,6 +103,44 @@ impl<'a> NumberingResolver<'a> {
                                 overrides.insert((nid, ilvl as i32), val as i32);
                             }
                         }
+
+                        // Parse level definition overrides (style change)
+                        if let (Some(ilvl), Some(level)) =
+                            (override_def.i_level, &override_def.level)
+                        {
+                            let ilvl = ilvl as i32;
+                            let start = level
+                                .start
+                                .as_ref()
+                                .and_then(|s| s.value)
+                                .map(|v| v as i32)
+                                .unwrap_or(1); // Default to 1 if not specified in override? Or inherit?
+                                               // In strict XML, if start not present in override, it might inherit.
+                                               // But here we construct a full LevelDef.
+                                               // Ideally we should merge with abstract level.
+                                               // For now, let's take what's in the override or default.
+
+                            let num_fmt = level
+                                .number_format
+                                .as_ref()
+                                .map(|f| f.value.to_string())
+                                .unwrap_or_else(|| "decimal".to_string());
+                            let lvl_text = level
+                                .level_text
+                                .as_ref()
+                                .and_then(|t| t.value.as_ref())
+                                .map(|v| v.to_string());
+
+                            style_overrides.insert(
+                                (nid, ilvl),
+                                LevelDef {
+                                    ilvl,
+                                    start,
+                                    num_fmt,
+                                    lvl_text,
+                                },
+                            );
+                        }
                     }
                 }
             }
@@ -109,6 +150,7 @@ impl<'a> NumberingResolver<'a> {
             num_instances,
             abstract_nums,
             overrides,
+            style_overrides,
             counters: HashMap::new(),
             level_shifts,
             _phantom: std::marker::PhantomData,
@@ -145,9 +187,11 @@ impl<'a> NumberingResolver<'a> {
         let counters = self.counters.entry(abs_id).or_insert_with(|| vec![0; 10]);
 
         // Find level definition
-        let level_def = levels
-            .iter()
-            .find(|l| l.ilvl == ilvl)
+        // Check for style override first
+        let level_def = self
+            .style_overrides
+            .get(&(num_id, ilvl))
+            .or_else(|| levels.iter().find(|l| l.ilvl == ilvl))
             .or_else(|| levels.first());
 
         let Some(level) = level_def else {
@@ -186,10 +230,16 @@ impl<'a> NumberingResolver<'a> {
                 let placeholder = format!("%{}", level_num);
                 if marker.contains(&placeholder) {
                     // Find formatting for this level
-                    let fmt = levels
-                        .iter()
-                        .find(|l| l.ilvl == i as i32)
+                    let fmt = self
+                        .style_overrides
+                        .get(&(num_id, i as i32))
                         .map(|l| l.num_fmt.as_str())
+                        .or_else(|| {
+                            levels
+                                .iter()
+                                .find(|l| l.ilvl == i as i32)
+                                .map(|l| l.num_fmt.as_str())
+                        })
                         .unwrap_or("decimal");
 
                     // If count is 0, it means it hasn't been initialized/incremented yet, so use start value
@@ -323,5 +373,72 @@ impl<'a> NumberingResolver<'a> {
             }
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rs_docx::document::{
+        AbstractNum, AbstractNumId, Level, LevelOverride, LevelStart, LevelText, Num, NumFmt,
+        Numbering,
+    };
+    use std::borrow::Cow;
+
+    #[test]
+    fn test_lvl_override_style_change() {
+        // Construct AbstractNum: Level 0 is decimal "%1."
+        let abstract_num = AbstractNum {
+            abstract_num_id: Some(1),
+            levels: vec![Level {
+                i_level: Some(0),
+                start: Some(LevelStart { value: Some(1) }),
+                number_format: Some(NumFmt {
+                    value: Cow::Borrowed("decimal"),
+                }),
+                level_text: Some(LevelText {
+                    value: Some(Cow::Borrowed("%1.")),
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // Construct Num: References AbstractNum 1, but overrides Level 0 to upperLetter "%1)"
+        let num = Num {
+            num_id: Some(2),
+            abstract_num_id: Some(AbstractNumId { value: Some(1) }),
+            level_overrides: vec![LevelOverride {
+                i_level: Some(0),
+                start_override: None,
+                level: Some(Level {
+                    i_level: Some(0),
+                    start: Some(LevelStart { value: Some(1) }),
+                    number_format: Some(NumFmt {
+                        value: Cow::Borrowed("upperLetter"),
+                    }),
+                    level_text: Some(LevelText {
+                        value: Some(Cow::Borrowed("%1)")),
+                    }),
+                    ..Default::default()
+                }),
+            }],
+        };
+
+        let numbering = Numbering {
+            abstract_numberings: vec![abstract_num],
+            numberings: vec![num],
+        };
+
+        let docx = Docx {
+            numbering: Some(numbering),
+            ..Default::default()
+        };
+
+        let mut resolver = NumberingResolver::new(&docx);
+
+        // numId 2, defaults to decimal, but overridden to upperLetter
+        let marker = resolver.next_marker(2, 0);
+        assert_eq!(marker, "A)");
     }
 }

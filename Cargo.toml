@@ -23,13 +23,13 @@ default = []
 python = ["pyo3"]
 
 [dependencies]
-rs-docx = { version = "0.1.7", features = ["async"] }
+rs-docx = { version = "0.1.8", features = ["async"] }
 base64 = "0.22"
 thiserror = "2.0"
 zip = "2.2"
 regex = "1.10"
 clap = { version = "4.5", features = ["derive"] }
-pyo3 = { version = "0.21", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
 
 [lib]
 name = "dm2xcod"
