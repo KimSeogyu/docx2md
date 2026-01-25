@@ -4,8 +4,13 @@ requires-python = ">=3.12"
 
 [[package]]
 name = "dm2xcod"
-version = "0.1.2"
-source = { directory = "../../" }
+version = "0.1.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/af/da04ad5e8ef8fac7dc309d5b8dc3b4c051982c71a9a04fbf9dd4ccf88d6c/dm2xcod-0.1.9.tar.gz", hash = "sha256:1d835b06c052c9f9e96ab206338865cfa955caecdb85009b167e1ff9f300e0af", size = 855846, upload-time = "2026-01-25T23:26:31.436Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/85/63348ce5e06ba2c61584efad1762ee132d9d168f80542371c11a1fc5c583/dm2xcod-0.1.9-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:d782392e00148bf319f43b893772a496c7852655f9f639701cf308513d5dda9c", size = 2331887, upload-time = "2026-01-25T23:26:25.799Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/23/905b542eea68f85dd4dc5d1283d7ea9a3a3042d237111862b8d42060e50a/dm2xcod-0.1.9-cp312-cp312-win_amd64.whl", hash = "sha256:4afb403768b4ffe89b76448c2206e618d51007d8fe0769c0a4153ee5f763704b", size = 1152166, upload-time = "2026-01-25T23:26:27.953Z" },
+]
 
 [[package]]
 name = "python-example"
@@ -16,4 +21,4 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "dm2xcod", directory = "../../" }]
+requires-dist = [{ name = "dm2xcod", specifier = "==0.1.9" }]
