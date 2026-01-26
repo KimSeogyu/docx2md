@@ -31,10 +31,10 @@ dist/
 *.dylib
 *.pyd
 
-/tests/output/
+*.pyd
+
 deps/
 
 debug_*.md
-debug_*.md
 verify_samples*
-.DS_Store
+
