@@ -1,6 +1,6 @@
 [package]
 name = "dm2xcod"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 rust-version = "1.75"
 description = "DOCX to Markdown converter written in Rust"
@@ -32,7 +32,7 @@ default = []
 python = ["pyo3"]
 
 [dependencies]
-rs-docx = { git = "https://github.com/KimSeogyu/rs-docx", version = "0.1.9", features = [
+rs-docx = { git = "https://github.com/KimSeogyu/rs-docx", tag = "v0.2.0", features = [
     "async",
 ] }
 base64 = "0.22"

@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "dm2xcod"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "base64",
  "clap",
@@ -858,7 +858,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 [[package]]
 name = "rs-docx"
 version = "0.1.9"
-source = "git+https://github.com/KimSeogyu/rs-docx#d1ee5ad5a7053e5cd00939f0ed1053fd92d3bf0b"
+source = "git+https://github.com/KimSeogyu/rs-docx?tag=v0.2.0#8616566819d0f6e4d6b3b29e34eb84e20cbd8f0c"
 dependencies = [
  "async_zip",
  "derive_more",

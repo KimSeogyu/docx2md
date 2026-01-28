@@ -17,6 +17,7 @@ struct FormattedSegment {
     has_strike: bool,
     is_insertion: bool,
     is_deletion: bool,
+    anchor: Option<String>,
 }
 
 impl ParagraphConverter {
@@ -28,15 +29,44 @@ impl ParagraphConverter {
         // Merge adjacent segments with same formatting
         let merged = Self::merge_segments(segments);
 
+        // Separate leading anchors (anchors at the start with empty text) from the rest
+        let mut leading_anchors = Vec::new();
+        let mut content_segments = Vec::new();
+        let mut looking_for_anchors = true;
+
+        for seg in merged {
+            if looking_for_anchors && seg.text.is_empty() && seg.anchor.is_some() {
+                if let Some(anchor) = &seg.anchor {
+                    // Use id attribute instead of name for better compatibility (VS Code etc.)
+                    leading_anchors.push(format!("<a id=\"{}\"></a>", anchor));
+                }
+            } else {
+                looking_for_anchors = false;
+                content_segments.push(seg);
+            }
+        }
+
         // Convert merged segments to markdown
-        let text = Self::segments_to_markdown(&merged, context);
+        let text = Self::segments_to_markdown(&content_segments, context);
+
+        let anchor_tags = leading_anchors.join("");
 
         if text.trim().is_empty() {
-            return Ok(String::new());
+            // If there is no content but there are anchors, return just the anchors
+            return Ok(anchor_tags);
         }
 
         // Apply paragraph-level formatting
-        Self::apply_paragraph_formatting(para, text, context)
+        let formatted_text = Self::apply_paragraph_formatting(para, text, context)?;
+
+        if !anchor_tags.is_empty() {
+            // Place anchors on the line BEFORE the paragraph
+            // This ensures scrolling lands above the header/list item
+            // and maintains valid Markdown syntax for headers (e.g. ### Title)
+            Ok(format!("{}\n{}", anchor_tags, formatted_text))
+        } else {
+            Ok(formatted_text)
+        }
     }
 
     /// Collects formatted segments from paragraph content.
@@ -90,6 +120,14 @@ impl ParagraphConverter {
                         // Hyperlinks are treated as plain text segments
                         segments.push(FormattedSegment {
                             text: link_md,
+                            ..Default::default()
+                        });
+                    }
+                }
+                ParagraphContent::BookmarkStart(bookmark) => {
+                    if let Some(name) = &bookmark.name {
+                        segments.push(FormattedSegment {
+                            anchor: Some(name.to_string()),
                             ..Default::default()
                         });
                     }
@@ -325,6 +363,7 @@ impl ParagraphConverter {
                     has_strike: false,
                     is_insertion: false,
                     is_deletion: false,
+                    anchor: None,
                 });
             }
             if !part.is_empty() {
@@ -336,6 +375,7 @@ impl ParagraphConverter {
                     has_strike,
                     is_insertion: false,
                     is_deletion: false,
+                    anchor: None,
                 });
             }
         }
@@ -356,6 +396,7 @@ impl ParagraphConverter {
                     && last.has_strike == seg.has_strike
                     && last.is_insertion == seg.is_insertion
                     && last.is_deletion == seg.is_deletion
+                    && last.anchor == seg.anchor
                 {
                     // Merge text
                     last.text.push_str(&seg.text);
@@ -373,6 +414,11 @@ impl ParagraphConverter {
         let mut result = String::new();
 
         for seg in segments {
+            // Render anchor if present
+            if let Some(anchor) = &seg.anchor {
+                result.push_str(&format!("<a id=\"{}\"></a>", anchor));
+            }
+
             let mut text = seg.text.clone();
 
             // Apply track changes formatting first
@@ -399,9 +445,9 @@ impl ParagraphConverter {
             }
 
             if seg.is_bold && seg.is_italic {
-                text = format!("<strong>*{}*</strong>", text);
+                text = format!("**__{}__**", text);
             } else if seg.is_bold {
-                text = format!("<strong>{}</strong>", text);
+                text = format!("**{}**", text);
             } else if seg.is_italic {
                 text = format!("*{}*", text);
             }
@@ -412,7 +458,6 @@ impl ParagraphConverter {
         result
     }
 
-    /// Applies paragraph-level formatting (heading, list, alignment).
     /// Applies paragraph-level formatting (heading, list, alignment).
     fn apply_paragraph_formatting(
         para: &Paragraph,
@@ -433,13 +478,10 @@ impl ParagraphConverter {
         let mut prefix = String::new();
         let mut is_heading = false;
 
-        // Check for heading via pStyle (check effective style_id or original para_style_id)
-        // Note: For headings, we usually rely on the style name/ID directly applied.
-        // If we want to support basedOn inheritance for headings, we would need to check the chain.
-        // For now, let's check the effective style_id which might be set by direct formatting or preserved.
+        // Check for heading via pStyle
         if let Some(style) = &effective_props.style_id {
             if let Some(heading_level) = context.localization.parse_heading_style(&style.value) {
-                // Don't generate heading for empty text (e.g., TOC entries with only field codes)
+                // Don't generate heading for empty text
                 if text.trim().is_empty() {
                     return Ok(String::new());
                 }
@@ -450,7 +492,6 @@ impl ParagraphConverter {
         }
 
         // Check for numbering (list items)
-        // Use effective properties which include inherited numbering
         if let Some(num_pr) = &effective_props.numbering {
             if let (Some(num_id), Some(ilvl)) = (&num_pr.id, &num_pr.level) {
                 let num_id_val = num_id.value as i32;
@@ -463,20 +504,18 @@ impl ParagraphConverter {
                         prefix = formatted_prefix;
                         prefix.push(' ');
                         is_heading = true;
-                        marker = String::new(); // Clear to prevent double-append below
+                        marker = String::new(); // Clear marker if it was consumed/replaced by prefix
                     }
                 }
 
                 if is_heading {
                     prefix.push_str(&marker);
-                    prefix.push(' ');
+                    if !marker.is_empty() {
+                        prefix.push(' ');
+                    }
                 } else {
                     let indent = context.numbering.get_indent(num_id_val, ilvl_val);
-
-                    // Cap indentation to avoid code block trigger (4 spaces = indent 2)
-                    // Apply consistently to all markers for uniform behavior
                     let effective_indent = indent.min(1);
-
                     let indent_str = "  ".repeat(effective_indent);
                     prefix.push_str(&indent_str);
                     prefix.push_str(&marker);
@@ -542,18 +581,245 @@ impl ParagraphConverter {
             link_text.push_str(&text);
         }
 
-        // Get target URL from relationship
-        let url = hyperlink
-            .id
-            .as_ref()
-            .and_then(|id| context.rels.get(&id.to_string()))
-            .cloned()
-            .unwrap_or_else(|| "#".to_string());
+        // Get target URL from relationship or anchor
+        let url = if let Some(anchor) = &hyperlink.anchor {
+            // Internal bookmark link (used in TOC entries)
+            format!("#{}", anchor)
+        } else if let Some(id) = &hyperlink.id {
+            // External link via relationship
+            context
+                .rels
+                .get(&id.to_string())
+                .cloned()
+                .unwrap_or_else(|| "#".to_string())
+        } else {
+            "#".to_string()
+        };
 
         if link_text.is_empty() {
             Ok(url)
         } else {
             Ok(format!("[{}]({})", link_text, url))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rs_docx::document::{Hyperlink, ParagraphContent, Run, RunContent, Text};
+    use std::borrow::Cow;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_toc_anchor_link() {
+        // Create a paragraph with a hyperlink having an anchor
+        let mut para = Paragraph::default();
+
+        let mut hyperlink = Hyperlink::default();
+        hyperlink.anchor = Some(Cow::Borrowed("_Toc123456789"));
+
+        let mut run = Run::default();
+        run.content.push(RunContent::Text(Text {
+            text: "Introduction".into(),
+            ..Default::default()
+        }));
+
+        hyperlink.content.push(run);
+
+        para.content.push(ParagraphContent::Link(hyperlink));
+
+        // Setup minimal context
+        let docx = rs_docx::Docx::default();
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions::default();
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+        let localization = crate::localization::KoreanLocalization;
+
+        let mut context = super::ConversionContext {
+            rels: &rels,
+            numbering: &mut numbering_resolver,
+            image_extractor: &mut image_extractor,
+            options: &options,
+            footnotes: Vec::new(),
+            endnotes: Vec::new(),
+            comments: Vec::new(),
+            docx_comments: None,
+            docx_footnotes: None,
+            docx_endnotes: None,
+            styles: &docx.styles,
+            style_resolver: &style_resolver,
+            localization: &localization,
+        };
+
+        // Convert
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+
+        // Verify
+        assert_eq!(md, "[Introduction](#_Toc123456789)");
+    }
+
+    #[test]
+    fn test_toc_anchor_target() {
+        use rs_docx::document::BookmarkStart;
+
+        // Create a paragraph with a bookmark start (anchor target)
+        let mut para = Paragraph::default();
+
+        let mut bookmark = BookmarkStart::default();
+        bookmark.name = Some(Cow::Borrowed("_Toc123456789"));
+
+        let mut run = Run::default();
+        run.content.push(RunContent::Text(Text {
+            text: "Chapter 1".into(),
+            ..Default::default()
+        }));
+
+        para.content.push(ParagraphContent::BookmarkStart(bookmark));
+        para.content.push(ParagraphContent::Run(run));
+
+        // Setup minimal context
+        let docx = rs_docx::Docx::default();
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions::default();
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+        let localization = crate::localization::KoreanLocalization;
+
+        let mut context = super::ConversionContext {
+            rels: &rels,
+            numbering: &mut numbering_resolver,
+            image_extractor: &mut image_extractor,
+            options: &options,
+            footnotes: Vec::new(),
+            endnotes: Vec::new(),
+            comments: Vec::new(),
+            docx_comments: None,
+            docx_footnotes: None,
+            docx_endnotes: None,
+            styles: &docx.styles,
+            style_resolver: &style_resolver,
+            localization: &localization,
+        };
+
+        // Convert
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+
+        // Verify that the anchor tag is generated BEFORE the text (on new line)
+        assert_eq!(md, "<a id=\"_Toc123456789\"></a>\nChapter 1");
+    }
+
+    #[test]
+    fn test_anchor_placement_header() {
+        use rs_docx::document::BookmarkStart;
+
+        // Create a paragraph with Heading 1 style and a bookmark
+        let mut para = Paragraph::default();
+        let mut props = rs_docx::formatting::ParagraphProperty::default();
+        props.style_id = Some(rs_docx::formatting::ParagraphStyleId {
+            value: "Heading1".into(),
+        });
+        para.property = Some(props);
+
+        let mut bookmark = BookmarkStart::default();
+        bookmark.name = Some(Cow::Borrowed("header_anchor"));
+
+        let mut run = Run::default();
+        run.content.push(RunContent::Text(Text {
+            text: "Header Title".into(),
+            ..Default::default()
+        }));
+
+        para.content.push(ParagraphContent::BookmarkStart(bookmark));
+        para.content.push(ParagraphContent::Run(run));
+
+        // Setup mock context
+        let docx = rs_docx::Docx::default();
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions::default();
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+        let localization = crate::localization::KoreanLocalization;
+
+        let mut context = super::ConversionContext {
+            rels: &rels,
+            numbering: &mut numbering_resolver,
+            image_extractor: &mut image_extractor,
+            options: &options,
+            footnotes: Vec::new(),
+            endnotes: Vec::new(),
+            comments: Vec::new(),
+            docx_comments: None,
+            docx_footnotes: None,
+            docx_endnotes: None,
+            styles: &docx.styles,
+            style_resolver: &style_resolver,
+            localization: &localization,
+        };
+
+        // Convert
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+
+        // Verify: Anchor should be on the line BEFORE the header
+        // Expected: "<a id=\"header_anchor\"></a>\n# Header Title"
+        assert_eq!(md, "<a id=\"header_anchor\"></a>\n# Header Title");
+    }
+
+    #[test]
+    fn test_adjacent_anchors() {
+        use rs_docx::document::BookmarkStart;
+
+        // Create a paragraph with multiple adjacent bookmarks
+        let mut para = Paragraph::default();
+
+        let mut b1 = BookmarkStart::default();
+        b1.name = Some(Cow::Borrowed("anchor1"));
+        let mut b2 = BookmarkStart::default();
+        b2.name = Some(Cow::Borrowed("anchor2"));
+
+        let mut run = Run::default();
+        run.content.push(RunContent::Text(Text {
+            text: "Content".into(),
+            ..Default::default()
+        }));
+
+        para.content.push(ParagraphContent::BookmarkStart(b1));
+        para.content.push(ParagraphContent::BookmarkStart(b2));
+        para.content.push(ParagraphContent::Run(run));
+
+        // Setup minimal context
+        let docx = rs_docx::Docx::default();
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions::default();
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+        let localization = crate::localization::KoreanLocalization;
+
+        let mut context = super::ConversionContext {
+            rels: &rels,
+            numbering: &mut numbering_resolver,
+            image_extractor: &mut image_extractor,
+            options: &options,
+            footnotes: Vec::new(),
+            endnotes: Vec::new(),
+            comments: Vec::new(),
+            docx_comments: None,
+            docx_footnotes: None,
+            docx_endnotes: None,
+            styles: &docx.styles,
+            style_resolver: &style_resolver,
+            localization: &localization,
+        };
+
+        // Convert
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+
+        // Verify both anchors are present
+        assert_eq!(md, "<a id=\"anchor1\"></a><a id=\"anchor2\"></a>\nContent");
     }
 }

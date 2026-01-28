@@ -183,6 +183,11 @@ impl DocxToMarkdown {
                     }
                 }
             }
+            BodyContent::BookmarkStart(bookmark) => {
+                if let Some(name) = &bookmark.name {
+                    output.push_str(&format!("<a id=\"{}\"></a>", name));
+                }
+            }
             _ => {}
         }
         Ok(output)
@@ -229,4 +234,74 @@ pub struct ConversionContext<'a> {
     pub style_resolver: &'a StyleResolver<'a>,
     /// Localization strategy
     pub localization: &'a dyn LocalizationStrategy,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rs_docx::document::{BodyContent, BookmarkStart, Paragraph, SDTContent, SDT};
+    use std::borrow::Cow;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_convert_content_sdt_with_bookmark() {
+        // Setup mock docx parts
+        let styles = rs_docx::styles::Styles::new();
+        let docx = rs_docx::Docx::default();
+
+        let mut numbering_resolver = NumberingResolver::new(&docx);
+        let mut image_extractor = ImageExtractor::new_skip();
+        let options = ConvertOptions::default();
+        let rels = HashMap::new();
+        let style_resolver = StyleResolver::new(&styles);
+        let localization = KoreanLocalization;
+
+        let mut context = ConversionContext {
+            rels: &rels,
+            numbering: &mut numbering_resolver,
+            image_extractor: &mut image_extractor,
+            options: &options,
+            footnotes: Vec::new(),
+            endnotes: Vec::new(),
+            comments: Vec::new(),
+            docx_comments: None,
+            docx_footnotes: None,
+            docx_endnotes: None,
+            styles: &styles,
+            style_resolver: &style_resolver,
+            localization: &localization,
+        };
+
+        // Construct SDT with nested BookmarkStart and Paragraph
+        let mut sdt = SDT::default();
+        let mut sdt_content = SDTContent::default();
+
+        // Add BookmarkStart
+        let mut bookmark = BookmarkStart::default();
+        bookmark.name = Some(Cow::Borrowed("TestAnchor"));
+        sdt_content
+            .content
+            .push(BodyContent::BookmarkStart(bookmark));
+
+        // Add Paragraph
+        let mut para = Paragraph::default();
+        use rs_docx::document::{ParagraphContent, Run, RunContent, Text};
+        let mut run = Run::default();
+        run.content.push(RunContent::Text(Text {
+            text: "Content".into(),
+            ..Default::default()
+        }));
+        para.content.push(ParagraphContent::Run(run));
+
+        sdt_content.content.push(BodyContent::Paragraph(para));
+
+        sdt.content = Some(sdt_content);
+
+        // Convert
+        let result = DocxToMarkdown::convert_content(&BodyContent::Sdt(sdt), &mut context).unwrap();
+
+        // Verify
+        assert!(result.contains("<a name=\"TestAnchor\"></a>"));
+        assert!(result.contains("Content"));
+    }
 }
