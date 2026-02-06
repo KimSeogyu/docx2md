@@ -38,3 +38,4 @@ deps/
 debug_*.md
 verify_samples*
 
+tests/output

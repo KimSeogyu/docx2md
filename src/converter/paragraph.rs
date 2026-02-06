@@ -409,6 +409,77 @@ impl ParagraphConverter {
         merged
     }
 
+    /// Applies markdown formatting markers safely, handling edge cases.
+    ///
+    /// Handles:
+    /// - Empty or whitespace-only text (skips formatting)
+    /// - Text with newlines (applies formatting per line)
+    /// - Leading/trailing whitespace (preserves outside markers)
+    fn apply_format_safely(text: &str, open: &str, close: &str) -> String {
+        // Skip if text is empty or whitespace-only
+        if text.trim().is_empty() {
+            return text.to_string();
+        }
+
+        // Handle leading/trailing whitespace - preserve it outside the markers
+        let leading_ws: String = text
+            .chars()
+            .take_while(|c| c.is_whitespace() && *c != '\n')
+            .collect();
+        let trailing_ws: String = text
+            .chars()
+            .rev()
+            .take_while(|c| c.is_whitespace() && *c != '\n')
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+
+        let content_start = leading_ws.len();
+        let content_end = text.len() - trailing_ws.len();
+        let content = &text[content_start..content_end];
+
+        // If content contains newlines, apply formatting to each non-empty line
+        if content.contains('\n') {
+            let formatted: Vec<String> = content
+                .split('\n')
+                .map(|line| {
+                    let line_trimmed = line.trim();
+                    if line_trimmed.is_empty() {
+                        line.to_string()
+                    } else {
+                        // Preserve line's own leading/trailing whitespace
+                        let line_leading: String =
+                            line.chars().take_while(|c| c.is_whitespace()).collect();
+                        let line_trailing: String = line
+                            .chars()
+                            .rev()
+                            .take_while(|c| c.is_whitespace())
+                            .collect::<String>()
+                            .chars()
+                            .rev()
+                            .collect();
+                        format!(
+                            "{}{}{}{}{}",
+                            line_leading, open, line_trimmed, close, line_trailing
+                        )
+                    }
+                })
+                .collect();
+            return format!("{}{}{}", leading_ws, formatted.join("\n"), trailing_ws);
+        }
+
+        // Normal case: wrap content with markers, preserve outer whitespace
+        format!(
+            "{}{}{}{}{}",
+            leading_ws,
+            open,
+            content.trim(),
+            close,
+            trailing_ws
+        )
+    }
+
     /// Converts segments to markdown text.
     fn segments_to_markdown(segments: &[FormattedSegment], context: &ConversionContext) -> String {
         let mut result = String::new();
@@ -424,7 +495,7 @@ impl ParagraphConverter {
             // Apply track changes formatting first
             if seg.is_deletion {
                 // Deleted text: strikethrough
-                text = format!("~~{}~~", text);
+                text = Self::apply_format_safely(&text, "~~", "~~");
             }
             if seg.is_insertion {
                 // Inserted text: HTML ins tag or underline
@@ -440,16 +511,16 @@ impl ParagraphConverter {
                 if context.options.html_strikethrough {
                     text = format!("<s>{}</s>", text);
                 } else {
-                    text = format!("~~{}~~", text);
+                    text = Self::apply_format_safely(&text, "~~", "~~");
                 }
             }
 
             if seg.is_bold && seg.is_italic {
-                text = format!("**__{}__**", text);
+                text = format!("<strong><em>{}</em></strong>", text);
             } else if seg.is_bold {
-                text = format!("**{}**", text);
+                text = format!("<strong>{}</strong>", text);
             } else if seg.is_italic {
-                text = format!("*{}*", text);
+                text = format!("<em>{}</em>", text);
             }
 
             result.push_str(&text);
