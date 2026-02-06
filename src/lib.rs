@@ -23,7 +23,7 @@ pub mod localization;
 
 pub use converter::DocxToMarkdown;
 pub use error::{Error, Result};
-pub use localization::{DefaultLocalization, KoreanLocalization, LocalizationStrategy};
+pub use localization::parse_heading_style;
 
 use std::path::PathBuf;
 

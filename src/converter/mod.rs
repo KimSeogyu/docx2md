@@ -9,7 +9,6 @@ mod run;
 mod styles;
 mod table;
 
-use crate::localization::{KoreanLocalization, LocalizationStrategy};
 use crate::{error::Error, ConvertOptions, ImageHandling, Result};
 use rs_docx::document::BodyContent;
 use rs_docx::DocxFile;
@@ -115,10 +114,6 @@ impl DocxToMarkdown {
         // Initialize style resolver
         let style_resolver = StyleResolver::new(&docx.styles);
 
-        // Select localization strategy (currently hardcoded to Korean as per plan for default)
-        // TODO: Make this configurable via options
-        let localization_strategy = KoreanLocalization;
-
         // Convert body content
         let mut output = String::new();
         let mut context = ConversionContext {
@@ -134,7 +129,6 @@ impl DocxToMarkdown {
             docx_endnotes: docx.endnotes.as_ref(),
             styles: &docx.styles,
             style_resolver: &style_resolver,
-            localization: &localization_strategy,
         };
 
         for content in &docx.document.body.content {
@@ -232,8 +226,6 @@ pub struct ConversionContext<'a> {
     pub styles: &'a rs_docx::styles::Styles<'a>,
     /// Style resolver
     pub style_resolver: &'a StyleResolver<'a>,
-    /// Localization strategy
-    pub localization: &'a dyn LocalizationStrategy,
 }
 
 #[cfg(test)]
@@ -254,7 +246,6 @@ mod tests {
         let options = ConvertOptions::default();
         let rels = HashMap::new();
         let style_resolver = StyleResolver::new(&styles);
-        let localization = KoreanLocalization;
 
         let mut context = ConversionContext {
             rels: &rels,
@@ -269,7 +260,6 @@ mod tests {
             docx_endnotes: None,
             styles: &styles,
             style_resolver: &style_resolver,
-            localization: &localization,
         };
 
         // Construct SDT with nested BookmarkStart and Paragraph

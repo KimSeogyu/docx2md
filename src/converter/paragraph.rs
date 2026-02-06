@@ -551,7 +551,7 @@ impl ParagraphConverter {
 
         // Check for heading via pStyle
         if let Some(style) = &effective_props.style_id {
-            if let Some(heading_level) = context.localization.parse_heading_style(&style.value) {
+            if let Some(heading_level) = crate::localization::parse_heading_style(&style.value) {
                 // Don't generate heading for empty text
                 if text.trim().is_empty() {
                     return Ok(String::new());
@@ -567,17 +567,7 @@ impl ParagraphConverter {
             if let (Some(num_id), Some(ilvl)) = (&num_pr.id, &num_pr.level) {
                 let num_id_val = num_id.value as i32;
                 let ilvl_val = ilvl.value as i32;
-                let mut marker = context.numbering.next_marker(num_id_val, ilvl_val);
-
-                // Handle localization-specific numbering (e.g., Korean "제N조" -> Heading)
-                if let Some(formatted_prefix) = context.localization.handle_numbering(&marker) {
-                    if !is_heading {
-                        prefix = formatted_prefix;
-                        prefix.push(' ');
-                        is_heading = true;
-                        marker = String::new(); // Clear marker if it was consumed/replaced by prefix
-                    }
-                }
+                let marker = context.numbering.next_marker(num_id_val, ilvl_val);
 
                 if is_heading {
                     prefix.push_str(&marker);
@@ -707,7 +697,6 @@ mod tests {
         let mut image_extractor = super::super::ImageExtractor::new_skip();
         let options = crate::ConvertOptions::default();
         let style_resolver = super::super::StyleResolver::new(&docx.styles);
-        let localization = crate::localization::KoreanLocalization;
 
         let mut context = super::ConversionContext {
             rels: &rels,
@@ -722,7 +711,6 @@ mod tests {
             docx_endnotes: None,
             styles: &docx.styles,
             style_resolver: &style_resolver,
-            localization: &localization,
         };
 
         // Convert
@@ -758,7 +746,6 @@ mod tests {
         let mut image_extractor = super::super::ImageExtractor::new_skip();
         let options = crate::ConvertOptions::default();
         let style_resolver = super::super::StyleResolver::new(&docx.styles);
-        let localization = crate::localization::KoreanLocalization;
 
         let mut context = super::ConversionContext {
             rels: &rels,
@@ -773,7 +760,6 @@ mod tests {
             docx_endnotes: None,
             styles: &docx.styles,
             style_resolver: &style_resolver,
-            localization: &localization,
         };
 
         // Convert
@@ -814,7 +800,6 @@ mod tests {
         let mut image_extractor = super::super::ImageExtractor::new_skip();
         let options = crate::ConvertOptions::default();
         let style_resolver = super::super::StyleResolver::new(&docx.styles);
-        let localization = crate::localization::KoreanLocalization;
 
         let mut context = super::ConversionContext {
             rels: &rels,
@@ -829,7 +814,6 @@ mod tests {
             docx_endnotes: None,
             styles: &docx.styles,
             style_resolver: &style_resolver,
-            localization: &localization,
         };
 
         // Convert
@@ -869,7 +853,6 @@ mod tests {
         let mut image_extractor = super::super::ImageExtractor::new_skip();
         let options = crate::ConvertOptions::default();
         let style_resolver = super::super::StyleResolver::new(&docx.styles);
-        let localization = crate::localization::KoreanLocalization;
 
         let mut context = super::ConversionContext {
             rels: &rels,
@@ -884,7 +867,6 @@ mod tests {
             docx_endnotes: None,
             styles: &docx.styles,
             style_resolver: &style_resolver,
-            localization: &localization,
         };
 
         // Convert

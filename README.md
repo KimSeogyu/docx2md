@@ -9,10 +9,9 @@ A high-performance DOCX to Markdown converter written in Rust, with Python bindi
 
 - **Fast & Efficient**: Written in Rust for maximum performance.
 - **Rich Formatting**: Preserves bold, italic, underline, strikethrough, and more.
-  - Improves bold/italic rendering using HTML tags (`<strong>`, `<em>`) for better compatibility.
+  - Uses HTML tags (`<strong>`, `<em>`) for better cross-parser compatibility.
 - **Structure Preservation**: Handles heading hierarchy, lists (ordered/unordered), and tables.
 - **Image Support**: Extracts and embeds images.
-- **Localization**: Specialized support for Korean document headings (`--lang ko`).
 - **Cross-Platform**: Pre-built wheels for macOS (Intel/Apple Silicon), Windows, and Linux.
 - **Simple API**: Native Python bindings provided via PyO3.
 
@@ -54,9 +53,6 @@ dm2xcod = "0.3"
 
 ```bash
 dm2xcod input.docx output.md
-
-# With Korean localization support
-dm2xcod input.docx output.md --lang ko
 ```
 
 ### Python

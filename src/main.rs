@@ -20,10 +20,6 @@ struct Args {
     /// Skip extracting images
     #[arg(long)]
     skip_images: bool,
-
-    /// Language for localization (default: ko)
-    #[arg(long, default_value = "ko")]
-    lang: String,
 }
 
 fn main() {
