@@ -1,6 +1,6 @@
+use hard_xml::XmlRead;
 use rs_docx::document::{Inline, Pict, Run, RunContent};
 use rs_docx::formatting::{GridSpan, VMerge, VMergeType};
-use hard_xml::XmlRead;
 
 #[test]
 fn test_vml_pict_parsing() {

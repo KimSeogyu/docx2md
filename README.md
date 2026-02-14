@@ -81,6 +81,55 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
+### Rust (Advanced: Custom Extractor/Renderer Injection)
+
+`DocxToMarkdown::with_components(...)` lets you replace the default DOCX extractor and Markdown renderer.
+
+```rust
+use dm2xcod::adapters::docx::AstExtractor;
+use dm2xcod::converter::ConversionContext;
+use dm2xcod::core::ast::{BlockNode, DocumentAst};
+use dm2xcod::render::Renderer;
+use dm2xcod::{ConvertOptions, DocxToMarkdown, Result};
+use rs_docx::document::BodyContent;
+
+#[derive(Debug, Default, Clone, Copy)]
+struct MyExtractor;
+
+impl AstExtractor for MyExtractor {
+    fn extract<'a>(
+        &self,
+        _body: &[BodyContent<'a>],
+        _context: &mut ConversionContext<'a>,
+    ) -> Result<DocumentAst> {
+        Ok(DocumentAst {
+            blocks: vec![BlockNode::Paragraph("custom pipeline".to_string())],
+            references: Default::default(),
+        })
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct MyRenderer;
+
+impl Renderer for MyRenderer {
+    fn render(&self, document: &DocumentAst) -> Result<String> {
+        Ok(format!("blocks={}", document.blocks.len()))
+    }
+}
+
+fn main() -> Result<()> {
+    let converter = DocxToMarkdown::with_components(
+        ConvertOptions::default(),
+        MyExtractor,
+        MyRenderer,
+    );
+    let output = converter.convert("document.docx")?;
+    println!("{}", output);
+    Ok(())
+}
+```
+
 ## Development
 
 ### Build from Source
@@ -92,6 +141,16 @@ cargo build --release
 # Development with Python
 pip install maturin
 maturin develop --features python
+```
+
+### Performance Benchmark
+
+```bash
+# Uses tests/aaa, 3 iterations, up to 5 DOCX files by default
+./scripts/run_perf_benchmark.sh
+
+# Custom input_dir / iterations / max_files
+./scripts/run_perf_benchmark.sh ./samples 5 10
 ```
 
 ## License

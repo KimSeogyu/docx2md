@@ -24,6 +24,10 @@ pub enum Error {
     #[error("Relationship not found: {0}")]
     RelationshipNotFound(String),
 
+    /// A note/comment reference target was not found in the source document.
+    #[error("Missing reference: {0}")]
+    MissingReference(String),
+
     #[error("ZIP error: {0}")]
     Zip(#[from] zip::result::ZipError),
 

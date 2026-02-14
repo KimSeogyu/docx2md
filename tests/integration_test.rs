@@ -25,11 +25,12 @@ fn verify_markdown_conversion() {
     let converter = DocxToMarkdown::new(ConvertOptions::default());
 
     for folder in folders {
-        let dir = read_dir(folder).expect(&format!("Failed to read directory: {}", folder));
+        let dir =
+            read_dir(folder).unwrap_or_else(|_| panic!("Failed to read directory: {}", folder));
         for entry in dir {
             let entry = entry.unwrap();
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "docx") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "docx") {
                 println!("Verifying conversion: {:?}", path);
                 let path_str = path.to_str().expect("Failed to convert path to string");
                 match converter.convert(path_str) {
@@ -40,8 +41,9 @@ fn verify_markdown_conversion() {
                             .to_str()
                             .expect("Failed to convert file stem to string");
                         let output_path = format!("{}/{}.md", output_dir, file_stem);
-                        let mut file = File::create(&output_path)
-                            .expect(&format!("Failed to create output file: {}", output_path));
+                        let mut file = File::create(&output_path).unwrap_or_else(|_| {
+                            panic!("Failed to create output file: {}", output_path)
+                        });
                         file.write_all(markdown.as_bytes())
                             .expect("Failed to write to output file");
                         count += 1;

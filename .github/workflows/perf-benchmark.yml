@@ -1,0 +1,25 @@
+name: Performance Benchmark
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Run Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Run benchmark script
+        run: ./scripts/run_perf_benchmark.sh
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-benchmark-result
+          path: output_tests/perf/

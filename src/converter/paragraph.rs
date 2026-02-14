@@ -1,6 +1,9 @@
 //! Paragraph converter - handles paragraph elements and their structure.
 
 use super::{ConversionContext, RunConverter};
+use crate::render::{
+    escape_html_attr, escape_markdown_link_destination, escape_markdown_link_text,
+};
 use crate::Result;
 use rs_docx::document::{Hyperlink, Paragraph, ParagraphContent};
 
@@ -20,9 +23,60 @@ struct FormattedSegment {
     anchor: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FieldPhase {
+    Instruction,
+    Result,
+}
+
 impl ParagraphConverter {
+    /// Filters a run so only field-visible content remains, updating field stack.
+    fn filter_run_by_field_state<'a>(
+        run: &rs_docx::document::Run<'a>,
+        field_stack: &mut Vec<FieldPhase>,
+    ) -> rs_docx::document::Run<'a> {
+        let mut filtered = run.clone();
+        filtered.content.clear();
+
+        for content in &run.content {
+            match content {
+                rs_docx::document::RunContent::FieldChar(fc) => {
+                    if let Some(char_type) = &fc.ty {
+                        match char_type {
+                            rs_docx::document::CharType::Begin => {
+                                field_stack.push(FieldPhase::Instruction)
+                            }
+                            rs_docx::document::CharType::Separate => {
+                                if let Some(last) = field_stack.last_mut() {
+                                    *last = FieldPhase::Result;
+                                }
+                            }
+                            rs_docx::document::CharType::End => {
+                                let _ = field_stack.pop();
+                            }
+                        }
+                    }
+                }
+                // Keep existing behavior: field instructions are never rendered.
+                rs_docx::document::RunContent::InstrText(_)
+                | rs_docx::document::RunContent::DelInstrText(_) => {}
+                _ => {
+                    // Skip non-instruction payload while inside field instruction section.
+                    if field_stack.last() != Some(&FieldPhase::Instruction) {
+                        filtered.content.push(content.clone());
+                    }
+                }
+            }
+        }
+
+        filtered
+    }
+
     /// Converts a Paragraph to Markdown.
-    pub fn convert(para: &Paragraph, context: &mut ConversionContext) -> Result<String> {
+    pub fn convert<'a>(
+        para: &Paragraph<'a>,
+        context: &mut ConversionContext<'a>,
+    ) -> Result<String> {
         // Collect all formatted segments from runs
         let segments = Self::collect_segments(para, context)?;
 
@@ -38,7 +92,7 @@ impl ParagraphConverter {
             if looking_for_anchors && seg.text.is_empty() && seg.anchor.is_some() {
                 if let Some(anchor) = &seg.anchor {
                     // Use id attribute instead of name for better compatibility (VS Code etc.)
-                    leading_anchors.push(format!("<a id=\"{}\"></a>", anchor));
+                    leading_anchors.push(format!("<a id=\"{}\"></a>", escape_html_attr(anchor)));
                 }
             } else {
                 looking_for_anchors = false;
@@ -51,7 +105,13 @@ impl ParagraphConverter {
 
         let anchor_tags = leading_anchors.join("");
 
-        if text.trim().is_empty() {
+        let is_effectively_empty = if context.preserve_whitespace() {
+            text.is_empty()
+        } else {
+            text.trim().is_empty()
+        };
+
+        if is_effectively_empty {
             // If there is no content but there are anchors, return just the anchors
             return Ok(anchor_tags);
         }
@@ -70,13 +130,12 @@ impl ParagraphConverter {
     }
 
     /// Collects formatted segments from paragraph content.
-    fn collect_segments(
-        para: &Paragraph,
-        context: &mut ConversionContext,
+    fn collect_segments<'a>(
+        para: &Paragraph<'a>,
+        context: &mut ConversionContext<'a>,
     ) -> Result<Vec<FormattedSegment>> {
         let mut segments = Vec::new();
-        // Field state: 0 = normal, 1 = after begin (skip instrText), 2 = after separate (visible TOC text)
-        let mut field_state = 0;
+        let mut field_stack = Vec::new();
 
         // Get paragraph style ID for inheritance
         let para_style_id = para
@@ -88,29 +147,16 @@ impl ParagraphConverter {
         for content in &para.content {
             match content {
                 ParagraphContent::Run(run) => {
-                    // Check for field characters (TOC, page refs, etc.)
-                    for rc in &run.content {
-                        if let rs_docx::document::RunContent::FieldChar(fc) = rc {
-                            if let Some(char_type) = &fc.ty {
-                                match char_type {
-                                    rs_docx::document::CharType::Begin => field_state = 1,
-                                    rs_docx::document::CharType::Separate => field_state = 2,
-                                    rs_docx::document::CharType::End => field_state = 0,
-                                }
-                            }
-                        }
-                    }
-
-                    // Skip field codes (instrText) in state 1
-                    if field_state == 1 {
+                    let filtered_run = Self::filter_run_by_field_state(run, &mut field_stack);
+                    if filtered_run.content.is_empty() {
                         continue;
                     }
 
-                    // In state 2 (after separate) or 0 (normal), extract visible text
-
-                    let text = Self::extract_text(run, context);
+                    // Extract visible text only (field instructions already filtered out).
+                    let text = Self::extract_text(&filtered_run, context);
                     if !text.is_empty() {
-                        let segs = Self::run_to_segment(run, &text, context, para_style_id);
+                        let segs =
+                            Self::run_to_segment(&filtered_run, &text, context, para_style_id);
                         segments.extend(segs);
                     }
                 }
@@ -188,7 +234,10 @@ impl ParagraphConverter {
     }
 
     /// Extracts text from a run, excluding field codes.
-    fn extract_text(run: &rs_docx::document::Run, context: &mut ConversionContext) -> String {
+    fn extract_text<'a>(
+        run: &rs_docx::document::Run<'a>,
+        context: &mut ConversionContext<'a>,
+    ) -> String {
         let mut text = String::new();
         for content in &run.content {
             match content {
@@ -206,18 +255,12 @@ impl ParagraphConverter {
                     text.push('\n');
                 }
                 rs_docx::document::RunContent::Drawing(drawing) => {
-                    if let Ok(Some(img_md)) = context
-                        .image_extractor
-                        .extract_from_drawing(drawing, context.rels)
-                    {
+                    if let Ok(Some(img_md)) = context.extract_image_from_drawing(drawing) {
                         text.push_str(&img_md);
                     }
                 }
                 rs_docx::document::RunContent::Pict(pict) => {
-                    if let Ok(Some(img_md)) = context
-                        .image_extractor
-                        .extract_from_pict(pict, context.rels)
-                    {
+                    if let Ok(Some(img_md)) = context.extract_image_from_pict(pict) {
                         text.push_str(&img_md);
                     }
                 }
@@ -227,79 +270,25 @@ impl ParagraphConverter {
                 rs_docx::document::RunContent::CommentReference(cref) => {
                     // Extract comment ID and look up comment text
                     if let Some(id) = &cref.id {
-                        let id_str = id.to_string();
-                        // Look up comment content
-                        if let Some(comments) = context.docx_comments {
-                            if let Some(comment) = comments
-                                .comments
-                                .iter()
-                                .find(|c| c.id.map(|i| i.to_string()) == Some(id_str.clone()))
-                            {
-                                // Extract text from comment paragraph
-                                let comment_text = comment.content.text();
-                                context.comments.push((id_str.clone(), comment_text));
-                            }
-                        }
-                        text.push_str(&format!("[^c{}]", id_str));
+                        let marker = context.register_comment_reference(id.as_ref());
+                        text.push_str(&marker);
                     }
                 }
                 rs_docx::document::RunContent::FootnoteReference(fnref) => {
                     // Extract footnote ID and look up footnote text
                     if let Some(ref id_str) = fnref.id {
-                        // Parse id string to isize for comparison
                         if let Ok(id_num) = id_str.parse::<isize>() {
-                            // Look up footnote content
-                            if let Some(footnotes) = context.docx_footnotes {
-                                if let Some(footnote) =
-                                    footnotes.content.iter().find(|f| f.id == Some(id_num))
-                                {
-                                    // Extract text from footnote body content
-                                    let footnote_text: String = footnote
-                                        .content
-                                        .iter()
-                                        .filter_map(|bc| match bc {
-                                            rs_docx::document::BodyContent::Paragraph(p) => {
-                                                Some(p.text())
-                                            }
-                                            _ => None,
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .join(" ");
-                                    context.footnotes.push(footnote_text);
-                                }
-                            }
-                            let idx = context.footnotes.len();
-                            text.push_str(&format!("[^{}]", idx));
+                            let marker = context.register_footnote_reference(id_num);
+                            text.push_str(&marker);
                         }
                     }
                 }
                 rs_docx::document::RunContent::EndnoteReference(enref) => {
                     // Extract endnote ID and look up endnote text
                     if let Some(ref id_str) = enref.id {
-                        // Parse id string to isize for comparison
                         if let Ok(id_num) = id_str.parse::<isize>() {
-                            // Look up endnote content
-                            if let Some(endnotes) = context.docx_endnotes {
-                                if let Some(endnote) =
-                                    endnotes.content.iter().find(|e| e.id == Some(id_num))
-                                {
-                                    // Extract text from endnote body content
-                                    let endnote_text: String = endnote
-                                        .content
-                                        .iter()
-                                        .filter_map(|bc| match bc {
-                                            rs_docx::document::BodyContent::Paragraph(p) => {
-                                                Some(p.text())
-                                            }
-                                            _ => None,
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .join(" ");
-                                    context.endnotes.push(endnote_text);
-                                }
-                            }
-                            let idx = context.endnotes.len();
-                            text.push_str(&format!("[^en{}]", idx));
+                            let marker = context.register_endnote_reference(id_num);
+                            text.push_str(&marker);
                         }
                     }
                 }
@@ -310,10 +299,10 @@ impl ParagraphConverter {
     }
 
     /// Creates formatted segments from a run, splitting on page breaks.
-    fn run_to_segment(
-        run: &rs_docx::document::Run,
+    fn run_to_segment<'a>(
+        run: &rs_docx::document::Run<'a>,
         text: &str,
-        context: &mut ConversionContext,
+        context: &mut ConversionContext<'a>,
         para_style_id: Option<&str>,
     ) -> Vec<FormattedSegment> {
         // Resolve run style ID
@@ -325,11 +314,8 @@ impl ParagraphConverter {
         }
 
         // Resolve effective properties
-        let props = context.style_resolver.resolve_run_property(
-            run.property.as_ref(),
-            run_style_id,
-            para_style_id,
-        );
+        let props =
+            context.resolve_run_property(run.property.as_ref(), run_style_id, para_style_id);
 
         let is_bold = props
             .bold
@@ -481,7 +467,10 @@ impl ParagraphConverter {
     }
 
     /// Converts segments to markdown text.
-    fn segments_to_markdown(segments: &[FormattedSegment], context: &ConversionContext) -> String {
+    fn segments_to_markdown(
+        segments: &[FormattedSegment],
+        context: &ConversionContext<'_>,
+    ) -> String {
         let mut result = String::new();
 
         for seg in segments {
@@ -503,12 +492,12 @@ impl ParagraphConverter {
             }
 
             // Apply regular formatting
-            if seg.has_underline && context.options.html_underline && !seg.is_insertion {
+            if seg.has_underline && context.html_underline_enabled() && !seg.is_insertion {
                 text = format!("<u>{}</u>", text);
             }
 
             if seg.has_strike && !seg.is_deletion {
-                if context.options.html_strikethrough {
+                if context.html_strikethrough_enabled() {
                     text = format!("<s>{}</s>", text);
                 } else {
                     text = Self::apply_format_safely(&text, "~~", "~~");
@@ -530,10 +519,10 @@ impl ParagraphConverter {
     }
 
     /// Applies paragraph-level formatting (heading, list, alignment).
-    fn apply_paragraph_formatting(
-        para: &Paragraph,
+    fn apply_paragraph_formatting<'a>(
+        para: &Paragraph<'a>,
         text: String,
-        context: &mut ConversionContext,
+        context: &mut ConversionContext<'a>,
     ) -> Result<String> {
         let para_style_id = para
             .property
@@ -542,9 +531,8 @@ impl ParagraphConverter {
             .map(|s| s.value.as_ref());
 
         // Resolve effective paragraph properties
-        let effective_props = context
-            .style_resolver
-            .resolve_paragraph_property(para.property.as_ref(), para_style_id);
+        let effective_props =
+            context.resolve_paragraph_property(para.property.as_ref(), para_style_id);
 
         let mut prefix = String::new();
         let mut is_heading = false;
@@ -567,7 +555,7 @@ impl ParagraphConverter {
             if let (Some(num_id), Some(ilvl)) = (&num_pr.id, &num_pr.level) {
                 let num_id_val = num_id.value as i32;
                 let ilvl_val = ilvl.value as i32;
-                let marker = context.numbering.next_marker(num_id_val, ilvl_val);
+                let marker = context.next_list_marker(num_id_val, ilvl_val);
 
                 if is_heading {
                     prefix.push_str(&marker);
@@ -575,9 +563,8 @@ impl ParagraphConverter {
                         prefix.push(' ');
                     }
                 } else {
-                    let indent = context.numbering.get_indent(num_id_val, ilvl_val);
-                    let effective_indent = indent.min(1);
-                    let indent_str = "  ".repeat(effective_indent);
+                    let indent = context.list_indent_level(num_id_val, ilvl_val);
+                    let indent_str = "  ".repeat(indent);
                     prefix.push_str(&indent_str);
                     prefix.push_str(&marker);
                     prefix.push(' ');
@@ -585,7 +572,12 @@ impl ParagraphConverter {
             }
         }
 
-        let final_text = format!("{}{}", prefix, text.trim());
+        let text_for_output = if context.preserve_whitespace() {
+            text.as_str()
+        } else {
+            text.trim()
+        };
+        let final_text = format!("{}{}", prefix, text_for_output);
 
         // Check for text alignment (only if not heading)
         if !is_heading {
@@ -612,46 +604,33 @@ impl ParagraphConverter {
     }
 
     /// Converts a hyperlink to Markdown format.
-    fn convert_hyperlink(
-        hyperlink: &Hyperlink,
-        context: &mut ConversionContext,
+    fn convert_hyperlink<'a>(
+        hyperlink: &Hyperlink<'a>,
+        context: &mut ConversionContext<'a>,
         para_style_id: Option<&str>,
     ) -> Result<String> {
         let mut link_text = String::new();
-        let mut field_state = 0; // 0=normal, 1=instrText, 2=visible
+        let mut field_stack = Vec::new();
 
         for run in &hyperlink.content {
-            // Check field char
-            for rc in &run.content {
-                if let rs_docx::document::RunContent::FieldChar(fc) = rc {
-                    if let Some(char_type) = &fc.ty {
-                        match char_type {
-                            rs_docx::document::CharType::Begin => field_state = 1,
-                            rs_docx::document::CharType::Separate => field_state = 2,
-                            rs_docx::document::CharType::End => field_state = 0,
-                        }
-                    }
-                }
-            }
-
-            if field_state == 1 {
+            let filtered_run = Self::filter_run_by_field_state(run, &mut field_stack);
+            if filtered_run.content.is_empty() {
                 continue;
             }
 
-            let text = RunConverter::convert(run, context, para_style_id)?;
+            let text = RunConverter::convert(&filtered_run, context, para_style_id)?;
             link_text.push_str(&text);
         }
 
         // Get target URL from relationship or anchor
         let url = if let Some(anchor) = &hyperlink.anchor {
             // Internal bookmark link (used in TOC entries)
-            format!("#{}", anchor)
+            format!("#{}", escape_markdown_link_destination(anchor))
         } else if let Some(id) = &hyperlink.id {
             // External link via relationship
             context
-                .rels
-                .get(&id.to_string())
-                .cloned()
+                .relationship_target(id.as_ref())
+                .map(str::to_owned)
                 .unwrap_or_else(|| "#".to_string())
         } else {
             "#".to_string()
@@ -660,7 +639,11 @@ impl ParagraphConverter {
         if link_text.is_empty() {
             Ok(url)
         } else {
-            Ok(format!("[{}]({})", link_text, url))
+            Ok(format!(
+                "[{}]({})",
+                escape_markdown_link_text(&link_text),
+                escape_markdown_link_destination(&url)
+            ))
         }
     }
 }
@@ -677,8 +660,10 @@ mod tests {
         // Create a paragraph with a hyperlink having an anchor
         let mut para = Paragraph::default();
 
-        let mut hyperlink = Hyperlink::default();
-        hyperlink.anchor = Some(Cow::Borrowed("_Toc123456789"));
+        let mut hyperlink = Hyperlink {
+            anchor: Some(Cow::Borrowed("_Toc123456789")),
+            ..Default::default()
+        };
 
         let mut run = Run::default();
         run.content.push(RunContent::Text(Text {
@@ -698,20 +683,16 @@ mod tests {
         let options = crate::ConvertOptions::default();
         let style_resolver = super::super::StyleResolver::new(&docx.styles);
 
-        let mut context = super::ConversionContext {
-            rels: &rels,
-            numbering: &mut numbering_resolver,
-            image_extractor: &mut image_extractor,
-            options: &options,
-            footnotes: Vec::new(),
-            endnotes: Vec::new(),
-            comments: Vec::new(),
-            docx_comments: None,
-            docx_footnotes: None,
-            docx_endnotes: None,
-            styles: &docx.styles,
-            style_resolver: &style_resolver,
-        };
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            None,
+            None,
+            None,
+            &style_resolver,
+        );
 
         // Convert
         let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
@@ -727,8 +708,10 @@ mod tests {
         // Create a paragraph with a bookmark start (anchor target)
         let mut para = Paragraph::default();
 
-        let mut bookmark = BookmarkStart::default();
-        bookmark.name = Some(Cow::Borrowed("_Toc123456789"));
+        let bookmark = BookmarkStart {
+            name: Some(Cow::Borrowed("_Toc123456789")),
+            ..Default::default()
+        };
 
         let mut run = Run::default();
         run.content.push(RunContent::Text(Text {
@@ -747,20 +730,16 @@ mod tests {
         let options = crate::ConvertOptions::default();
         let style_resolver = super::super::StyleResolver::new(&docx.styles);
 
-        let mut context = super::ConversionContext {
-            rels: &rels,
-            numbering: &mut numbering_resolver,
-            image_extractor: &mut image_extractor,
-            options: &options,
-            footnotes: Vec::new(),
-            endnotes: Vec::new(),
-            comments: Vec::new(),
-            docx_comments: None,
-            docx_footnotes: None,
-            docx_endnotes: None,
-            styles: &docx.styles,
-            style_resolver: &style_resolver,
-        };
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            None,
+            None,
+            None,
+            &style_resolver,
+        );
 
         // Convert
         let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
@@ -775,14 +754,18 @@ mod tests {
 
         // Create a paragraph with Heading 1 style and a bookmark
         let mut para = Paragraph::default();
-        let mut props = rs_docx::formatting::ParagraphProperty::default();
-        props.style_id = Some(rs_docx::formatting::ParagraphStyleId {
-            value: "Heading1".into(),
-        });
+        let props = rs_docx::formatting::ParagraphProperty {
+            style_id: Some(rs_docx::formatting::ParagraphStyleId {
+                value: "Heading1".into(),
+            }),
+            ..Default::default()
+        };
         para.property = Some(props);
 
-        let mut bookmark = BookmarkStart::default();
-        bookmark.name = Some(Cow::Borrowed("header_anchor"));
+        let bookmark = BookmarkStart {
+            name: Some(Cow::Borrowed("header_anchor")),
+            ..Default::default()
+        };
 
         let mut run = Run::default();
         run.content.push(RunContent::Text(Text {
@@ -801,20 +784,16 @@ mod tests {
         let options = crate::ConvertOptions::default();
         let style_resolver = super::super::StyleResolver::new(&docx.styles);
 
-        let mut context = super::ConversionContext {
-            rels: &rels,
-            numbering: &mut numbering_resolver,
-            image_extractor: &mut image_extractor,
-            options: &options,
-            footnotes: Vec::new(),
-            endnotes: Vec::new(),
-            comments: Vec::new(),
-            docx_comments: None,
-            docx_footnotes: None,
-            docx_endnotes: None,
-            styles: &docx.styles,
-            style_resolver: &style_resolver,
-        };
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            None,
+            None,
+            None,
+            &style_resolver,
+        );
 
         // Convert
         let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
@@ -831,10 +810,14 @@ mod tests {
         // Create a paragraph with multiple adjacent bookmarks
         let mut para = Paragraph::default();
 
-        let mut b1 = BookmarkStart::default();
-        b1.name = Some(Cow::Borrowed("anchor1"));
-        let mut b2 = BookmarkStart::default();
-        b2.name = Some(Cow::Borrowed("anchor2"));
+        let b1 = BookmarkStart {
+            name: Some(Cow::Borrowed("anchor1")),
+            ..Default::default()
+        };
+        let b2 = BookmarkStart {
+            name: Some(Cow::Borrowed("anchor2")),
+            ..Default::default()
+        };
 
         let mut run = Run::default();
         run.content.push(RunContent::Text(Text {
@@ -854,25 +837,292 @@ mod tests {
         let options = crate::ConvertOptions::default();
         let style_resolver = super::super::StyleResolver::new(&docx.styles);
 
-        let mut context = super::ConversionContext {
-            rels: &rels,
-            numbering: &mut numbering_resolver,
-            image_extractor: &mut image_extractor,
-            options: &options,
-            footnotes: Vec::new(),
-            endnotes: Vec::new(),
-            comments: Vec::new(),
-            docx_comments: None,
-            docx_footnotes: None,
-            docx_endnotes: None,
-            styles: &docx.styles,
-            style_resolver: &style_resolver,
-        };
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            None,
+            None,
+            None,
+            &style_resolver,
+        );
 
         // Convert
         let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
 
         // Verify both anchors are present
         assert_eq!(md, "<a id=\"anchor1\"></a><a id=\"anchor2\"></a>\nContent");
+    }
+
+    #[test]
+    fn test_preserve_whitespace_option() {
+        let mut para = Paragraph::default();
+        let mut run = Run::default();
+        run.content.push(RunContent::Text(Text {
+            text: "  Keep Surrounding Spaces  ".into(),
+            ..Default::default()
+        }));
+        para.content.push(ParagraphContent::Run(run));
+
+        let docx = rs_docx::Docx::default();
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions {
+            preserve_whitespace: true,
+            ..Default::default()
+        };
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            None,
+            None,
+            None,
+            &style_resolver,
+        );
+
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+        assert_eq!(md, "  Keep Surrounding Spaces  ");
+    }
+
+    #[test]
+    fn test_deep_list_indentation_not_clamped() {
+        use rs_docx::document::{
+            AbstractNum, AbstractNumId, Level, LevelStart, LevelText, Num, NumFmt, Numbering,
+        };
+
+        let mut para = Paragraph::default();
+        let props = rs_docx::formatting::ParagraphProperty {
+            numbering: Some(rs_docx::formatting::NumberingProperty::from((
+                2isize, 3isize,
+            ))),
+            ..Default::default()
+        };
+        para.property = Some(props);
+
+        let mut run = Run::default();
+        run.content.push(RunContent::Text(Text {
+            text: "Deep Item".into(),
+            ..Default::default()
+        }));
+        para.content.push(ParagraphContent::Run(run));
+
+        let abstract_num = AbstractNum {
+            abstract_num_id: Some(1),
+            levels: vec![Level {
+                i_level: Some(3),
+                start: Some(LevelStart { value: Some(1) }),
+                number_format: Some(NumFmt {
+                    value: Cow::Borrowed("decimal"),
+                }),
+                level_text: Some(LevelText {
+                    value: Some(Cow::Borrowed("%4.")),
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let num = Num {
+            num_id: Some(2),
+            abstract_num_id: Some(AbstractNumId { value: Some(1) }),
+            ..Default::default()
+        };
+        let docx = rs_docx::Docx {
+            numbering: Some(Numbering {
+                abstract_numberings: vec![abstract_num],
+                numberings: vec![num],
+            }),
+            ..Default::default()
+        };
+
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions::default();
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            None,
+            None,
+            None,
+            &style_resolver,
+        );
+
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+        assert_eq!(md, "      1. Deep Item");
+    }
+
+    #[test]
+    fn test_duplicate_footnote_references_reuse_index() {
+        use rs_docx::document::{BodyContent, FootNote, FootNotes, FootnoteReference};
+
+        let mut note_para = Paragraph::default();
+        let mut note_run = Run::default();
+        note_run.content.push(RunContent::Text(Text {
+            text: "Same footnote text".into(),
+            ..Default::default()
+        }));
+        note_para.content.push(ParagraphContent::Run(note_run));
+
+        let docx = rs_docx::Docx {
+            footnotes: Some(FootNotes {
+                content: vec![FootNote {
+                    id: Some(5),
+                    content: vec![BodyContent::Paragraph(note_para)],
+                    ..Default::default()
+                }],
+            }),
+            ..Default::default()
+        };
+
+        let mut para = Paragraph::default();
+        let mut run1 = Run::default();
+        run1.content
+            .push(RunContent::FootnoteReference(FootnoteReference {
+                id: Some(Cow::Borrowed("5")),
+                ..Default::default()
+            }));
+        para.content.push(ParagraphContent::Run(run1));
+        let mut run2 = Run::default();
+        run2.content
+            .push(RunContent::FootnoteReference(FootnoteReference {
+                id: Some(Cow::Borrowed("5")),
+                ..Default::default()
+            }));
+        para.content.push(ParagraphContent::Run(run2));
+
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions::default();
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            None,
+            docx.footnotes.as_ref(),
+            None,
+            &style_resolver,
+        );
+
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+        assert_eq!(md, "[^1][^1]");
+        assert_eq!(context.footnote_count(), 1);
+    }
+
+    #[test]
+    fn test_duplicate_comment_references_reuse_definition() {
+        use rs_docx::document::{Comment, CommentReference, Comments};
+
+        let mut comment_para = Paragraph::default();
+        let mut comment_run = Run::default();
+        comment_run.content.push(RunContent::Text(Text {
+            text: "Shared comment".into(),
+            ..Default::default()
+        }));
+        comment_para
+            .content
+            .push(ParagraphContent::Run(comment_run));
+
+        let docx = rs_docx::Docx {
+            comments: Some(Comments {
+                comments: vec![Comment {
+                    id: Some(9),
+                    author: Cow::Borrowed("tester"),
+                    content: comment_para,
+                }],
+            }),
+            ..Default::default()
+        };
+
+        let mut para = Paragraph::default();
+        let mut run1 = Run::default();
+        run1.content
+            .push(RunContent::CommentReference(CommentReference {
+                id: Some(Cow::Borrowed("9")),
+            }));
+        para.content.push(ParagraphContent::Run(run1));
+        let mut run2 = Run::default();
+        run2.content
+            .push(RunContent::CommentReference(CommentReference {
+                id: Some(Cow::Borrowed("9")),
+            }));
+        para.content.push(ParagraphContent::Run(run2));
+
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions::default();
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            docx.comments.as_ref(),
+            None,
+            None,
+            &style_resolver,
+        );
+
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+        assert_eq!(md, "[^c9][^c9]");
+        assert_eq!(context.comment_count(), 1);
+        assert_eq!(context.comment_at(0), Some(("9", "Shared comment")));
+    }
+
+    #[test]
+    fn test_field_code_within_single_run_preserves_visible_text() {
+        use hard_xml::XmlRead;
+
+        let mut para = Paragraph::default();
+        let run = Run::from_str(
+            r#"<w:r>
+                <w:t>prefix </w:t>
+                <w:fldChar w:fldCharType="begin"/>
+                <w:instrText>PAGEREF _Ref</w:instrText>
+                <w:t>hidden </w:t>
+                <w:fldChar w:fldCharType="separate"/>
+                <w:t>Visible</w:t>
+                <w:fldChar w:fldCharType="end"/>
+                <w:t> suffix</w:t>
+            </w:r>"#,
+        )
+        .expect("Failed to parse run XML");
+        para.content.push(ParagraphContent::Run(run));
+
+        let docx = rs_docx::Docx::default();
+        let rels = HashMap::new();
+        let mut numbering_resolver = super::super::NumberingResolver::new(&docx);
+        let mut image_extractor = super::super::ImageExtractor::new_skip();
+        let options = crate::ConvertOptions::default();
+        let style_resolver = super::super::StyleResolver::new(&docx.styles);
+
+        let mut context = super::ConversionContext::new(
+            &rels,
+            &mut numbering_resolver,
+            &mut image_extractor,
+            &options,
+            None,
+            None,
+            None,
+            &style_resolver,
+        );
+
+        let md = ParagraphConverter::convert(&para, &mut context).expect("Conversion failed");
+        assert_eq!(md, "prefix Visible suffix");
     }
 }

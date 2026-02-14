@@ -243,12 +243,10 @@ impl ImageExtractor {
             .map_err(|e| Error::DocxParse(format!("Failed to open DOCX as ZIP: {}", e)))?;
 
         // Image path is relative to word/ directory typically
-        let full_path = if image_path.starts_with("media/") {
-            format!("word/{}", image_path)
-        } else if !image_path.starts_with("word/") {
-            format!("word/{}", image_path)
-        } else {
+        let full_path = if image_path.starts_with("word/") {
             image_path.to_string()
+        } else {
+            format!("word/{}", image_path)
         };
 
         // Try full path first, then original

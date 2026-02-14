@@ -9,9 +9,9 @@ pub struct RunConverter;
 
 impl RunConverter {
     /// Converts a Run to Markdown text with formatting.
-    pub fn convert(
-        run: &Run,
-        context: &mut ConversionContext,
+    pub fn convert<'a>(
+        run: &Run<'a>,
+        context: &mut ConversionContext<'a>,
         para_style_id: Option<&str>,
     ) -> Result<String> {
         let mut text = String::new();
@@ -35,19 +35,13 @@ impl RunConverter {
                 }
                 RunContent::Drawing(drawing) => {
                     // Handle inline images (DrawingML)
-                    if let Some(img_md) = context
-                        .image_extractor
-                        .extract_from_drawing(drawing, context.rels)?
-                    {
+                    if let Some(img_md) = context.extract_image_from_drawing(drawing)? {
                         text.push_str(&img_md);
                     }
                 }
                 RunContent::Pict(pict) => {
                     // Handle legacy images (VML)
-                    if let Some(img_md) = context
-                        .image_extractor
-                        .extract_from_pict(pict, context.rels)?
-                    {
+                    if let Some(img_md) = context.extract_image_from_pict(pict)? {
                         text.push_str(&img_md);
                     }
                 }
@@ -62,31 +56,27 @@ impl RunConverter {
                         }
                     }
                 }
-                RunContent::FootnoteReference(_fnref) => {
-                    let idx = context.footnotes.len() + 1;
-                    text.push_str(&format!("[^{}]", idx));
+                RunContent::FootnoteReference(fnref) => {
+                    if let Some(id_str) = &fnref.id {
+                        if let Ok(id_num) = id_str.parse::<isize>() {
+                            let marker = context.register_footnote_reference(id_num);
+                            text.push_str(&marker);
+                        }
+                    }
                 }
-                RunContent::EndnoteReference(_enref) => {
-                    let idx = context.endnotes.len() + 1;
-                    text.push_str(&format!("[^en{}]", idx));
+                RunContent::EndnoteReference(enref) => {
+                    if let Some(id_str) = &enref.id {
+                        if let Ok(id_num) = id_str.parse::<isize>() {
+                            let marker = context.register_endnote_reference(id_num);
+                            text.push_str(&marker);
+                        }
+                    }
                 }
                 RunContent::CommentReference(cref) => {
                     // Extract comment ID and look up comment text
                     if let Some(id) = &cref.id {
-                        let id_str = id.to_string();
-                        // Look up comment content
-                        if let Some(comments) = context.docx_comments {
-                            if let Some(comment) = comments
-                                .comments
-                                .iter()
-                                .find(|c| c.id.map(|i| i.to_string()) == Some(id_str.clone()))
-                            {
-                                // Extract text from comment paragraph
-                                let comment_text = comment.content.text();
-                                context.comments.push((id_str.clone(), comment_text));
-                            }
-                        }
-                        text.push_str(&format!("[^c{}]", id_str));
+                        let marker = context.register_comment_reference(id.as_ref());
+                        text.push_str(&marker);
                     }
                 }
                 _ => {}
@@ -107,11 +97,8 @@ impl RunConverter {
         }
 
         // Check formatting via resolver
-        let effective_props = context.style_resolver.resolve_run_property(
-            run.property.as_ref(),
-            run_style_id,
-            para_style_id,
-        );
+        let effective_props =
+            context.resolve_run_property(run.property.as_ref(), run_style_id, para_style_id);
 
         text = Self::apply_formatting(&text, &effective_props, context);
 
@@ -121,8 +108,8 @@ impl RunConverter {
     /// Applies text formatting based on run properties.
     fn apply_formatting(
         text: &str,
-        props: &rs_docx::formatting::CharacterProperty,
-        context: &ConversionContext,
+        props: &rs_docx::formatting::CharacterProperty<'_>,
+        context: &ConversionContext<'_>,
     ) -> String {
         let mut result = text.to_string();
 
@@ -151,12 +138,12 @@ impl RunConverter {
             .unwrap_or(false);
 
         // Apply formatting in order: underline (HTML), strike, bold, italic
-        if has_underline && context.options.html_underline {
+        if has_underline && context.html_underline_enabled() {
             result = format!("<u>{}</u>", result);
         }
 
         if has_strike {
-            if context.options.html_strikethrough {
+            if context.html_strikethrough_enabled() {
                 result = format!("<s>{}</s>", result);
             } else {
                 result = format!("~~{}~~", result);

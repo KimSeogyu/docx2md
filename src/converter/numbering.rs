@@ -217,8 +217,8 @@ impl<'a> NumberingResolver<'a> {
         }
 
         // Reset lower levels
-        for i in (ilvl_idx + 1)..counters.len() {
-            counters[i] = 0;
+        for counter in counters.iter_mut().skip(ilvl_idx + 1) {
+            *counter = 0;
         }
 
         // Use level text if available (substituting placeholders)
@@ -268,14 +268,14 @@ impl<'a> NumberingResolver<'a> {
             "bullet" | "none" => "-".to_string(),
             "decimal" => format!("{}", val),
             "lowerLetter" => {
-                if val >= 1 && val <= 26 {
+                if (1..=26).contains(&val) {
                     char::from(b'a' + (val - 1) as u8).to_string()
                 } else {
                     format!("{}", val)
                 }
             }
             "upperLetter" => {
-                if val >= 1 && val <= 26 {
+                if (1..=26).contains(&val) {
                     char::from(b'A' + (val - 1) as u8).to_string()
                 } else {
                     format!("{}", val)
@@ -295,11 +295,11 @@ impl<'a> NumberingResolver<'a> {
     fn format_circle_number(val: i32) -> String {
         // Unicode circled numbers: ① = U+2460, ② = U+2461, ... ⑳ = U+2473
         // Extended: ㉑ = U+3251, ㉒ = U+3252, ... ㊿ = U+32BF (21-50)
-        if val >= 1 && val <= 20 {
+        if (1..=20).contains(&val) {
             char::from_u32(0x245F + val as u32)
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| format!("{}", val))
-        } else if val >= 21 && val <= 50 {
+        } else if (21..=50).contains(&val) {
             char::from_u32(0x3250 + (val - 20) as u32)
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| format!("{}", val))

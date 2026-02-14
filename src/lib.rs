@@ -16,10 +16,60 @@
 //! let markdown = converter.convert("document.docx").unwrap();
 //! println!("{}", markdown);
 //! ```
+//!
+//! ## Advanced Example (Custom Extractor/Renderer)
+//!
+//! ```no_run
+//! use dm2xcod::adapters::docx::AstExtractor;
+//! use dm2xcod::converter::ConversionContext;
+//! use dm2xcod::core::ast::{BlockNode, DocumentAst};
+//! use dm2xcod::render::Renderer;
+//! use dm2xcod::{ConvertOptions, DocxToMarkdown, Result};
+//! use rs_docx::document::BodyContent;
+//!
+//! #[derive(Debug, Default, Clone, Copy)]
+//! struct MyExtractor;
+//!
+//! impl AstExtractor for MyExtractor {
+//!     fn extract<'a>(
+//!         &self,
+//!         _body: &[BodyContent<'a>],
+//!         _context: &mut ConversionContext<'a>,
+//!     ) -> Result<DocumentAst> {
+//!         Ok(DocumentAst {
+//!             blocks: vec![BlockNode::Paragraph("custom pipeline".to_string())],
+//!             references: Default::default(),
+//!         })
+//!     }
+//! }
+//!
+//! #[derive(Debug, Default, Clone, Copy)]
+//! struct MyRenderer;
+//!
+//! impl Renderer for MyRenderer {
+//!     fn render(&self, document: &DocumentAst) -> Result<String> {
+//!         Ok(format!("blocks={}", document.blocks.len()))
+//!     }
+//! }
+//!
+//! fn main() -> Result<()> {
+//!     let converter = DocxToMarkdown::with_components(
+//!         ConvertOptions::default(),
+//!         MyExtractor,
+//!         MyRenderer,
+//!     );
+//!     let output = converter.convert("document.docx")?;
+//!     println!("{}", output);
+//!     Ok(())
+//! }
+//! ```
 
+pub mod adapters;
 pub mod converter;
+pub mod core;
 pub mod error;
 pub mod localization;
+pub mod render;
 
 pub use converter::DocxToMarkdown;
 pub use error::{Error, Result};
@@ -38,6 +88,8 @@ pub struct ConvertOptions {
     pub html_underline: bool,
     /// Whether to use HTML for strikethrough text.
     pub html_strikethrough: bool,
+    /// Whether to fail conversion when a referenced note/comment cannot be resolved.
+    pub strict_reference_validation: bool,
 }
 
 impl Default for ConvertOptions {
@@ -47,6 +99,7 @@ impl Default for ConvertOptions {
             preserve_whitespace: false,
             html_underline: true,
             html_strikethrough: false,
+            strict_reference_validation: false,
         }
     }
 }
