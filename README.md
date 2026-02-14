@@ -153,6 +153,19 @@ maturin develop --features python
 ./scripts/run_perf_benchmark.sh ./samples 5 10
 ```
 
+#### Latest Benchmark Record (2026-02-14)
+
+- Command: `./scripts/run_perf_benchmark.sh ./tests/aaa 10 10`
+- Threshold gate: `./scripts/check_perf_threshold.sh ./output_tests/perf/latest.json 15.0` (`pass`)
+- Environment:
+  - OS: `macOS 26.2 (Darwin arm64)`
+  - Rust: `rustc 1.92.0 (ded5c06cf 2025-12-08)`
+- Result (`output_tests/perf/latest.json`):
+
+```json
+{"input_dir":"./tests/aaa","iterations":10,"files":2,"samples":20,"avg_ms":1.651,"min_ms":0.434,"max_ms":6.081,"total_ms":33.029,"overall_ms":33.034}
+```
+
 ### Performance Threshold Gate
 
 ```bash
