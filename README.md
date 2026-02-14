@@ -153,6 +153,27 @@ maturin develop --features python
 ./scripts/run_perf_benchmark.sh ./samples 5 10
 ```
 
+### Performance Threshold Gate
+
+```bash
+# Fails if avg_ms exceeds threshold
+./scripts/check_perf_threshold.sh ./output_tests/perf/latest.json 15.0
+```
+
+### Release Notes
+
+```bash
+# Auto-detect previous tag to HEAD
+./scripts/generate_release_notes.sh
+
+# Explicit range and output file
+./scripts/generate_release_notes.sh v0.3.9 v0.3.10 ./output_tests/release_notes.md
+```
+
+### API Stability
+
+See `docs/API_POLICY.md`.
+
 ## License
 
 MIT

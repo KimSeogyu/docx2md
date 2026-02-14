@@ -1,0 +1,43 @@
+name: Release Notes
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      to_ref:
+        description: "Target ref/tag (default: HEAD)"
+        required: false
+        default: "HEAD"
+      from_ref:
+        description: "Start ref/tag (optional)"
+        required: false
+        default: ""
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  notes:
+    name: Generate Notes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate notes
+        run: |
+          TO_REF="${{ github.ref_name }}"
+          FROM_REF="${{ github.event.inputs.from_ref }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TO_REF="${{ github.event.inputs.to_ref }}"
+          fi
+          ./scripts/generate_release_notes.sh "${TO_REF}" "${FROM_REF}" ./output_tests/release_notes.md
+      - name: Upload notes artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: output_tests/release_notes.md
+      - name: Add summary
+        run: cat ./output_tests/release_notes.md >> "$GITHUB_STEP_SUMMARY"

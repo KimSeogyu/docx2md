@@ -2,6 +2,23 @@ name: Performance Benchmark
 
 on:
   workflow_dispatch:
+    inputs:
+      input_dir:
+        description: "Directory containing DOCX files"
+        required: false
+        default: "./tests/aaa"
+      iterations:
+        description: "Benchmark iterations"
+        required: false
+        default: "3"
+      max_files:
+        description: "Maximum number of files"
+        required: false
+        default: "5"
+      threshold_ms:
+        description: "Maximum allowed avg_ms"
+        required: false
+        default: "15.0"
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,7 +34,13 @@ jobs:
         with:
           toolchain: stable
       - name: Run benchmark script
-        run: ./scripts/run_perf_benchmark.sh
+        run: |
+          ./scripts/run_perf_benchmark.sh \
+            "${{ inputs.input_dir }}" \
+            "${{ inputs.iterations }}" \
+            "${{ inputs.max_files }}"
+      - name: Enforce perf threshold
+        run: ./scripts/check_perf_threshold.sh ./output_tests/perf/latest.json "${{ inputs.threshold_ms }}"
       - name: Upload benchmark artifact
         uses: actions/upload-artifact@v4
         with:
